@@ -1,0 +1,159 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@200;300;400;500;600;700&display=swap");
+*{
+    margin: 0;
+    padding: 0;
+ box-sizing: border-box;
+  font-family: "Poppins", sans-serif;
+}
+.face_login {
+    font-size: 40px;
+    color: rgb(45, 110, 231);
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-top: 300px;    
+    margin-right: 800px;          
+
+}
+.face_login1 {
+    gap: 50px;
+    margin-left:140px;
+    font-size: 25px;   
+    display: inline-block;
+    text-align: 50px;
+    
+}
+
+
+img {
+  width: 50px;
+  align-items: center;
+  justify-items: center;
+  gap: 10px;
+}
+.form_container {
+  position: absolute;
+  top: 25%;
+  left: 60%;
+  background: white;
+  padding: 40px;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  width: 360px;
+}
+
+.form_container:hover {
+  border: 2px solid black;
+  background: transparent;
+  color: black;
+  cursor: pointer;
+}
+
+.form_close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  color: black;
+  font-size: 20px;
+  opacity: 0.7;
+  cursor: pointer;
+}
+.input_box {
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.input_box input {
+  width: 100%;
+  padding: 15px 20px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 16px;
+  outline: none;
+}
+.button {
+  width: 100%;
+  padding: 15px;
+  background: #1877f2;
+  color: white;
+  font-weight: 600;
+  font-size: 16px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.buton:hover {
+  background: #166fe5;
+}
+/* Forgot Password */
+.forgot_container {
+  text-align: center;
+  margin: 15px 0;
+}
+
+#forgot_password {
+  color: #1877f2;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+#forgot_password:hover {
+  text-decoration: underline;
+}
+
+/* Divider line */
+.divider {
+  margin: 20px 0;
+  border: none;
+  border-top: 1px solid #ddd;
+}
+
+/* Create New Account Button */
+.login_signup {
+  text-align: center;
+}
+
+#signup {
+  display: inline-block;
+  background-color: #42b72a;
+  color: white;
+  padding: 12px 16px;
+  font-size: 16px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+#signup:hover {
+  background-color: #36a420;
+}
+@media (max-width: 1100px) {
+  .face_login {
+    position: static;
+    align-items: center;
+    text-align: center;
+    margin: 30px auto;
+  }
+  .face_login1 {
+    font-size: 18px;
+    padding: 0 20px;
+  }
+
+  .form_container {
+    position: static;
+    width: 90%;
+    margin: 0 auto 40px;
+    padding: 20px;
+    box-shadow: none;
+  }
+
+  .login_signup, #signup {
+    font-size: 14px;
+    padding: 12px;
+  }
+
+  .divider {
+    margin: 15px 0;
+  }
+}
