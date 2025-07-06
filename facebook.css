@@ -23,14 +23,6 @@
     text-align: 50px;
     
 }
-
-
-img {
-  width: 50px;
-  align-items: center;
-  justify-items: center;
-  gap: 10px;
-}
 .form_container {
   position: absolute;
   top: 25%;
