@@ -139,23 +139,8 @@ body:hover {
 .signup_form {
   transition: all 0.3s ease;
 }
-.success_message {
-  color: green;
-  background: #e6ffec;
-  padding: 10px;
-  border-radius: 5px;
-  margin-bottom: 10px;
-  text-align: center;
-}
 
-.error_message {
-  color: red;
-  background: #ffe6e6;
-  padding: 10px;
-  border-radius: 5px;
-  margin-bottom: 10px;
-  text-align: center;
-}
+
 
 @media (max-width: 1100px) {
   .face_login {

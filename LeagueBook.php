@@ -133,10 +133,8 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
       <button class="button" type="submit">Login</button>
 
-     <!-- AFTER (correct href) -->
-<div class="forgot_password"><a href="forgot_password.php">Forgot Password?</a></div>
 
-
+   <a href="forgot_password.php">Forgot Password?</a>
       <hr class="divider" />
 
       <div class="login_signup">
@@ -176,24 +174,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     </form>
   </div>
 </div>
-<script>
-  const pwFields = document.querySelectorAll(".input_box input[type='password']");
-  const pwToggles = document.querySelectorAll(".pw_hide");
-
-  pwToggles.forEach((icon, i) => {
-    icon.addEventListener('click', () => {
-      const pwInput = pwFields[i];
-      if (pwInput.type === "password") {
-        pwInput.type = "text";
-        icon.classList.replace("uil-eye-slash", "uil-eye");
-      } else {
-        pwInput.type = "password";
-        icon.classList.replace("uil-eye", "uil-eye-slash");
-      }
-    });
-  });
-</script>
-
 
 <script>
   const showSignup = document.getElementById('show_signup');

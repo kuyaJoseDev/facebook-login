@@ -27,7 +27,7 @@ $userName = $_SESSION['user_name'] ?? 'Guest';
 <body>
   <div class="main-container">
     <h2>Welcome, <?php echo htmlspecialchars($userName); ?>!</h2>
-
+    <a href="view_friend_request.php">View Friend Requests</a>
     <!-- Post Form -->
     <form action="Post.php" method="POST" class="post-form">
       <textarea name="content" placeholder="What's on your mind?" required></textarea><br>
