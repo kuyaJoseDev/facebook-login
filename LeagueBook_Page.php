@@ -35,7 +35,7 @@ $userName = $_SESSION['user_name'] ?? 'Guest';
     </form>
 
     <!-- Logout Button -->
-    <<form action="LeagueBook.php" method="POST" class="logout-form">
+    <form action="LeagueBook.php" method="POST" class="logout-form">
    <p>Logged in as: <strong><?php echo $_SESSION['user_name'] ?? 'Guest'; ?></strong></p>
     <button type="submit">Logout</button>
 </form>
