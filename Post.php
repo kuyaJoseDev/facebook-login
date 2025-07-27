@@ -2,26 +2,42 @@
 session_start();
 include("connect.php");
 
-// Check if user is logged in
 if (!isset($_SESSION['user_id'])) {
-    header("Location: LeagueBook.php");
+    die("Login required.");
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $user_id = $_SESSION['user_id'];
+    $content = trim($_POST['content'] ?? '');
+
+    if (empty($content)) {
+        die("Post content cannot be empty.");
+    }
+
+    // Handle image upload if present
+    $imagePath = null;
+    if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
+        $uploadDir = 'uploads/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0755, true); // create folder if not exists
+        }
+
+        $imageName = uniqid() . '_' . basename($_FILES['image']['name']);
+        $targetPath = $uploadDir . $imageName;
+
+        if (move_uploaded_file($_FILES['image']['tmp_name'], $targetPath)) {
+            $imagePath = $targetPath;
+        } else {
+            die("❌ Failed to upload image.");
+        }
+    }
+
+    // Insert post into DB
+    $stmt = $conn->prepare("INSERT INTO posts (user_id, content, image_path, created_at) VALUES (?, ?, ?, NOW())");
+    $stmt->bind_param("iss", $user_id, $content, $imagePath);
+    $stmt->execute();
+
+    header("Location: LeagueBook_Page.php?posted=1");
     exit();
 }
-
-// Get the content from the POST request
-$content = $_POST['content'] ?? '';
-
-// Check if content is not empty
-if (!empty(trim($content))) {
-    $user_id = $_SESSION['user_id'];
-
-    // Insert the post into the database
-    $stmt = $conn->prepare("INSERT INTO posts (user_id, content) VALUES (?, ?)");
-    $stmt->bind_param("is", $user_id, $content);
-    $stmt->execute();
-}
-
-// Redirect back to the main page
-header("Location: LeagueBook_Page.php");
-exit();
 ?>
