@@ -66,6 +66,16 @@ if (!$user) {
             });
         }
     });
+    // Already friends
+$isFriend = $conn->prepare("SELECT * FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)");
+$isFriend->bind_param("iiii", $myId, $otherId, $otherId, $myId);
+$isFriend->execute();
+$res = $isFriend->get_result();
+
+if ($res->num_rows > 0) {
+    // Show "Already Friends" or no button
+}
+
     </script>
 </head>
 <body>

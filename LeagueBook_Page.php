@@ -1,11 +1,23 @@
 <?php
 session_start();
 include("connect.php");
+$update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
+$update->bind_param("i", $_SESSION['user_id']);
+$update->execute();
+
 
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['email'])) {
     header("Location: LeagueBook.php");
     exit();
 }
+
+// 🔔 Count pending friend requests
+$pending = 0;
+$checkPending = $conn->prepare("SELECT COUNT(*) AS total FROM friend_requests WHERE receiver_id = ? AND status = 'pending'");
+$checkPending->bind_param("i", $_SESSION['user_id']);
+$checkPending->execute();
+$pendingResult = $checkPending->get_result()->fetch_assoc();
+$pending = $pendingResult['total'];
 
 $userName = $_SESSION['user_name'] ?? 'Guest';
 $userId = $_SESSION['user_id'];
@@ -31,6 +43,7 @@ if (isset($_GET['receiver_id'])) {
     }
 }
 
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -38,6 +51,8 @@ if (isset($_GET['receiver_id'])) {
   <meta charset="UTF-8" />
   <title>LeagueBook</title>
   <link rel="stylesheet" href="LeagueBook_Page.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
   <script>
   function copyToClipboard(text) {
       navigator.clipboard.writeText(text).then(() => {
@@ -48,37 +63,161 @@ if (isset($_GET['receiver_id'])) {
   }
   </script>
 </head>
+<div id="loading-screen">
+  <div class="loader-content">
+    <img src="" alt="" class="loader-logo">
+    <div class="spinner"></div>
+    <p>Loading LeagueBook...</p>
+  </div>
+</div>
+
+
 <body>
-  <div class="main-container">
-     <!-- Logout -->
+  <body>
+
+  <!-- ✅ Stylish Logout Bar -->
+  <div class="logout-bar">
+    <!-- 🔗 Fixed Top Bar with Homepage Shortcut -->
+<div class="top-bar">
+  <a href="LeagueBook_Page.php" class="http://localhost/League-University/LeagueBook/LeagueBook_Page.php">HOME</a>
+</div>
+
     <form action="LeagueBook.php" method="POST" class="logout-form">
-      <p>Logged in as: <strong><?php echo htmlspecialchars($userName); ?></strong></p>
-      <button type="submit">Logout</button>
+      <span>👤 Logged in as: <strong><?php echo htmlspecialchars($userName); ?></strong></span>
+      <button type="submit" class="logout-button">
+  <i class="fas fa-power-off"></i> Logout
+</button>
+
     </form>
+  </div>
+  <!-- Only visible on mobile -->
+<div class="mobile-toggle-section">
+
+  <button class="toggle-btn" onclick="toggleSection('online-offline')">👥 Show/Hide Online & Offline Users</button>
+  <div id="online-offline" class="toggle-content">
+    <!-- Your left-sidebar content here -->
+    <div class="online-users"> ... </div>
+    <div class="offline-users"> ... </div>
+  </div>
+
+  <button class="toggle-btn" onclick="toggleSection('suggested-users')">🔍 Show/Hide Suggestions</button>
+  <div id="suggested-users" class="toggle-content">
+    <!-- Your right-sidebar content here -->
+    <div class="user-suggestion"> ... </div>
+  </div>
+
+</div>
+
+
+  <div class="main-container">
+    <!-- Your layout with left-sidebar, wrapper, right-sidebar -->
+
+  <div class="main-container">
+    
+<div class="friend-request-container">
+  <a href="view_friend_request.php" class="friend-request-link">
+    📬 View Friend Requests
+    <?php if ($pending > 0): ?>
+      <span class="badge"><?php echo $pending; ?></span>
+    <?php endif; ?>
+  </a>
+</div>
+    
+
     <h2>👋 Welcome, <?php echo htmlspecialchars($userName); ?>!</h2>
 
-    <h3><a href="view_friend_request.php">📬 View Friend Requests</a></h3>
-    <h3>🧑‍🤝‍🧑 People You May Know:</h3>
+    
+    
+<!-- ✅ FIXED RIGHT SIDEBAR -->
 
-    <?php if (isset($friendRequestMessage)): ?>
-      <div class="alert-message"><?php echo $friendRequestMessage; ?></div>
-    <?php endif; ?>
+<div class="right-sidebar">
+  <h3>🧑‍🤝‍🧑 People You May Know</h3>
+  <?php if (isset($friendRequestMessage)): ?>
+    <div class="alert-message"><?php echo $friendRequestMessage; ?></div>
+  <?php endif; ?>
+  <!-- Suggested users list -->
+</div>
 
+
+
+
+
+<!-- ✅ FIXED LEFT SIDEBAR -->
+<div class="left-sidebar">
+  <h4>🟢 Online Users</h4>
+  <div class="online-users">
     <?php
-    $usersQuery = $conn->prepare("SELECT id, name FROM users WHERE id != ?");
-    $usersQuery->bind_param("i", $userId);
-    $usersQuery->execute();
-    $usersResult = $usersQuery->get_result();
-    while ($user = $usersResult->fetch_assoc()):
+    $onlineQuery = $conn->prepare("
+      SELECT u.id, u.name, u.last_active FROM users u
+      WHERE u.id != ?
+        AND u.id NOT IN (
+          SELECT CASE
+                   WHEN user1_id = ? THEN user2_id
+                   WHEN user2_id = ? THEN user1_id
+                 END
+          FROM friends
+          WHERE user1_id = ? OR user2_id = ?
+        )
+        AND u.id NOT IN (
+          SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+        )
+    ");
+    $onlineQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+    $onlineQuery->execute();
+    $onlineResult = $onlineQuery->get_result();
+
+    while ($user = $onlineResult->fetch_assoc()):
+      $isOnline = (strtotime($user['last_active']) > strtotime('-2 minutes'));
+      if ($isOnline):
     ?>
       <div class="user-suggestion">
-        <strong><?php echo htmlspecialchars($user['name']); ?></strong>
+        <strong><?= htmlspecialchars($user['name']); ?> 🟢 Online</strong>
         <form method="GET" action="LeagueBook_Page.php">
-          <input type="hidden" name="receiver_id" value="<?php echo (int)$user['id']; ?>">
+          <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
           <button type="submit">➕ Add Friend</button>
         </form>
       </div>
-    <?php endwhile; ?>
+    <?php endif; endwhile; ?>
+  </div>
+
+  <h4>⚫ Offline Users</h4>
+  <div class="offline-users">
+    <?php
+    $offlineQuery = $conn->prepare("
+      SELECT u.id, u.name, u.last_active FROM users u
+      WHERE u.id != ?
+        AND u.id NOT IN (
+          SELECT CASE
+                   WHEN user1_id = ? THEN user2_id
+                   WHEN user2_id = ? THEN user1_id
+                 END
+          FROM friends
+          WHERE user1_id = ? OR user2_id = ?
+        )
+        AND u.id NOT IN (
+          SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+        )
+    ");
+    $offlineQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+    $offlineQuery->execute();
+    $offlineResult = $offlineQuery->get_result();
+
+    while ($user = $offlineResult->fetch_assoc()):
+      $isOnline = (strtotime($user['last_active']) > strtotime('-2 minutes'));
+      if (!$isOnline):
+    ?>
+      <div class="user-suggestion">
+        <strong><?= htmlspecialchars($user['name']); ?> ⚫ Offline</strong>
+        <form method="GET" action="LeagueBook_Page.php">
+          <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
+          <button type="submit">➕ Add Friend</button>
+        </form>
+      </div>
+    <?php endif; endwhile; ?>
+  </div>
+</div>
+
+
 
     <!-- Post Form -->
     <form action="Post.php" method="POST" enctype="multipart/form-data" class="post-form">
@@ -198,5 +337,25 @@ $share_link = "http://localhost/League-University/LeagueBook/view_post.php?id=$p
       <hr>
     <?php endwhile; else: echo "<p>No posts yet.</p>"; endif; ?>
   </div>
+  <script>
+  window.addEventListener("load", function () {
+    const loader = document.getElementById("loading-screen");
+    loader.style.opacity = "0";
+    setTimeout(() => {
+      loader.style.display = "none";
+    }, 500);
+  });
+</script>
+<script>
+function toggleSection(id) {
+  const section = document.getElementById(id);
+  if (section.style.display === "block") {
+    section.style.display = "none";
+  } else {
+    section.style.display = "block";
+  }
+}
+</script>
+
 </body>
 </html>
