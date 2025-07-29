@@ -22,7 +22,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             exit();
         }
 
-        // Check if email already exists
         $check = $conn->prepare("SELECT id FROM users WHERE email = ?");
         $check->bind_param("s", $email);
         $check->execute();
@@ -32,7 +31,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             exit();
         }
 
-        // Save new user
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
         $stmt->bind_param("sss", $name, $email, $hashedPassword);
@@ -61,20 +59,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if (password_verify($password, $user['password'])) {
                 $_SESSION['email'] = $user['email'];
                 $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['name']; // ✅ store user name
+                $_SESSION['user_name'] = $user['name'];
                 header("Location: LeagueBook_Page.php");
                 exit();
             }
         }
 
-        // Login failed
         header("Location: LeagueBook.php?error=invalid");
         exit();
     }
 }
-
 ?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,8 +78,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
   <title>LeagueBook Login</title>
   <link rel="stylesheet" href="LeagueBook.css" />
   <link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.0/css/line.css"/>
+  <style>
+    .input_box {
+      position: relative;
+    }
+    .input_box .pw_toggle {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      cursor: pointer;
+      color: #555;
+    }
+  </style>
 </head>
 <body>
+
 <header class="header">
   <nav class="nav">
     <ul class="facebook_login">
@@ -127,17 +136,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         <i class="uil uil-envelope-alt email"></i>
       </div>
       <div class="input_box">
-        <input type="password" name="password" placeholder="Enter your password" required />
+        <input type="password" name="password" id="login_password" placeholder="Enter your password" required />
         <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye-slash pw_hide"></i>
+        <i class="uil uil-eye pw_toggle" toggle="login_password"></i>
       </div>
 
       <button class="button" type="submit">Login</button>
 
-
-   <a href="forgot_password.php">Forgot Password?</a>
+      <a href="forgot_password.php">Forgot Password?</a>
       <hr class="divider" />
-
       <div class="login_signup">
         <a href="#" id="show_signup">Create New Account</a>
       </div>
@@ -149,26 +156,25 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <form action="LeagueBook.php" method="POST">
       <input type="hidden" name="action" value="signup" />
       <div class="input_box">
-  <input type="text" name="name" placeholder="Enter your name" required />
-  <i class="uil uil-user"></i>
-</div>
+        <input type="text" name="name" placeholder="Enter your name" required />
+        <i class="uil uil-user"></i>
+      </div>
       <div class="input_box">
         <input type="email" name="email" placeholder="Enter your email address" required />
         <i class="uil uil-envelope-alt email"></i>
       </div>
       <div class="input_box">
-        <input type="password" name="password" placeholder="Create a password" required />
+        <input type="password" name="password" id="signup_password" placeholder="Create a password" required />
         <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye-slash pw_hide"></i>
+        <i class="uil uil-eye pw_toggle" toggle="signup_password"></i>
       </div>
       <div class="input_box">
-        <input type="password" name="confirm" placeholder="Confirm your password" required />
+        <input type="password" name="confirm" id="signup_confirm" placeholder="Confirm your password" required />
         <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye-slash pw_hide"></i>
+        <i class="uil uil-eye pw_toggle" toggle="signup_confirm"></i>
       </div>
 
       <button class="button" type="submit">Sign Up</button>
-
       <div class="login_signup">
         <p>Already have an account? <a href="#" id="show_login">Login</a></p>
       </div>
@@ -176,23 +182,37 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
   </div>
 </div>
 
+<!-- ✅ Scripts -->
 <script>
-  const showSignup = document.getElementById('show_signup');
-  const showLogin = document.getElementById('show_login');
-  const loginForm = document.getElementById('login_form');
-  const signupForm = document.getElementById('signup_form');
-
-  showSignup.addEventListener('click', function (e) {
+  // Toggle Login/Signup Form
+  document.getElementById('show_signup').addEventListener('click', function(e) {
     e.preventDefault();
-    loginForm.style.display = 'none';
-    signupForm.style.display = 'block';
+    document.getElementById('login_form').style.display = 'none';
+    document.getElementById('signup_form').style.display = 'block';
   });
 
-  showLogin.addEventListener('click', function (e) {
+  document.getElementById('show_login').addEventListener('click', function(e) {
     e.preventDefault();
-    loginForm.style.display = 'block';
-    signupForm.style.display = 'none';
+    document.getElementById('login_form').style.display = 'block';
+    document.getElementById('signup_form').style.display = 'none';
   });
+
+  // Toggle Password Visibility
+  document.querySelectorAll('.pw_toggle').forEach(function(icon) {
+  icon.addEventListener('click', function() {
+    const targetId = this.getAttribute('toggle');
+    const input = document.getElementById(targetId);
+    const isPassword = input.type === "password";
+    input.type = isPassword ? "text" : "password";
+    this.classList.toggle('uil-eye');
+    this.classList.toggle('uil-eye-slash');
+    
+  });
+});
+
 </script>
+
 </body>
 </html>
+
+

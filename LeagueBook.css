@@ -6,21 +6,17 @@
   font-family: "Poppins", sans-serif;
 }
 body {
-  background: linear-gradient(245.59deg, rgb(39, 39, 39) 0%, rgb(129, 130, 131)
-   28.53%, rgb(0, 201, 252) 75.52%);
+   background: linear-gradient(245.59deg, white 0%, darkblue 28.53%, darkblue 75.52%);
 }
-body:hover {
-  background: linear-gradient(245.59deg, white 0%, darkblue 28.53%, darkblue 75.52%);
 
-}
 .League_Book {
     font-size: 40px;
     color: lightblue;
     display: flex;
-    justify-content: center;
+    
     gap: 20px;
     margin-top: 100px;    
-    margin-right: 500px;          
+    margin-left: 150px;      
 
 }
 .League_Book1 {
@@ -36,7 +32,6 @@ body:hover {
   position: absolute;
   top: 25%;
   left: 60%;
-  background: linear-gradient(245.59deg, white 0%, darkblue 28.53%, darkblue 75.52%);
   padding: 40px;
   border-radius: 10px;
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
@@ -48,7 +43,10 @@ body:hover {
   background: transparent;
   color: black;
   cursor: pointer;
+   background: linear-gradient(245.59deg, rgb(39, 39, 39) 0%, rgb(54, 75, 95)
+   28.53%, rgb(7, 7, 7) 75.52%);
 }
+
 
 .form_close {
   position: absolute;
@@ -94,7 +92,7 @@ body:hover {
 }
 
 #forgot_password {
-  color: #1877f2;
+  color: #e7eaee;
   text-decoration: none;
   font-size: 14px;
 }
@@ -115,7 +113,7 @@ body:hover {
   text-align: center;
 }
 
-#signup {
+#show_signup {
   display: inline-block;
   background-color: #42b72a;
   color: white;
@@ -139,6 +137,49 @@ body:hover {
 .signup_form {
   transition: all 0.3s ease;
 }
+.friend-requests {
+    list-style: none;
+    padding: 0;
+    margin: 20px 0;
+}
+
+.friend-requests li {
+    background: #f0f0f0;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 8px;
+}
+
+.friend-requests button {
+    margin-left: 10px;
+}
+.alert-message {
+  color: red;
+  font-weight: bold;
+  margin: 10px 0;
+}
+.post-box, .comment-box {
+  background: #f9f9f9;
+  padding: 10px;
+  margin-bottom: 15px;
+  border-radius: 8px;
+}
+.user-suggestion {
+  margin-bottom: 10px;
+}
+.comment-form {
+  margin-top: 10px;
+}
+.toggle-password {
+  position: absolute;
+  right: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  cursor: pointer;
+  font-size: 18px;
+  color: #555;
+}
+
 
 
 
