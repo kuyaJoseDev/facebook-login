@@ -100,9 +100,12 @@ if (isset($_GET['shared_by'])) {
 <div class="main-container">
     <div style="margin-top: 20px;">
         <a href="LeagueBook_Page.php">
+            
             <button class="button">⬅ Back to Home</button>
+
         </a>
     </div>
+    
 
     <h2><?php echo htmlspecialchars($post['user_name']); ?>'s Post</h2>
     <p><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
@@ -113,10 +116,64 @@ if (isset($_GET['shared_by'])) {
     <?php endif; ?>
 
     <hr>
-    <h3>💬 Comments</h3>
+   <!-- 💬 Comment form -->
+<form action="comment.php" method="POST" class="comment-form">
+    <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
+    <input type="text" name="comment" placeholder="Write a comment..." required>
+    <button type="submit">💬 Comment</button>
+</form>
 
-    <?php display_comments($all_comments); ?>
-</div>
+<?php
+// Fetch all comments for the current post
+$commentStmt = $conn->prepare("SELECT comments.*, users.name AS user_name FROM comments JOIN users ON comments.user_id = users.id WHERE post_id = ? ORDER BY created_at ASC");
+$commentStmt->bind_param("i", $post['id']);
+$commentStmt->execute();
+$commentResult = $commentStmt->get_result();
+$comments = $commentResult->fetch_all(MYSQLI_ASSOC);
+
+
+
+// Display comments recursively
+function showComments($comments, $parent_id = null, $depth = 0) {
+    foreach ($comments as $c) {
+        if ($c['parent_id'] == $parent_id) {
+            // Count replies
+            $replies = array_filter($comments, fn($reply) => $reply['parent_id'] == $c['id']);
+            $reply_count = count($replies);
+
+            echo "<div style='margin-left:" . ($depth * 20) . "px; border-left:1px solid #ccc; padding-left:10px; margin-top:5px;'>";
+
+            echo "<strong>" . htmlspecialchars($c['user_name']) . ":</strong> " . nl2br(htmlspecialchars($c['content']));
+            echo "<div><a href='#' class='reply-link' data-comment-id='{$c['id']}'>Reply</a></div>";
+
+            // Hidden reply form
+            echo "<form class='reply-form' id='reply-form-{$c['id']}' action='comment.php' method='POST' style='display:none; margin-top:5px;'>
+                    <input type='hidden' name='post_id' value='{$c['post_id']}'>
+                    <input type='hidden' name='parent_id' value='{$c['id']}'>
+                    <textarea name='comment' required></textarea>
+                    <button type='submit'>Reply</button>
+                  </form>";
+
+            // Replies toggle button
+            if ($reply_count > 0) {
+                echo "<a href='#' class='toggle-replies' data-target='replies-{$c['id']}' style='color:green; display:block; margin-top:5px;'>🔽 View {$reply_count} " . ($reply_count === 1 ? "Reply" : "Replies") . "</a>";
+            }
+
+            // Replies container
+            echo "<div class='replies' id='replies-{$c['id']}' style='display:none;'>";
+            showComments($comments, $c['id'], $depth + 1); // Recursive call
+            echo "</div>";
+
+            echo "</div>";
+        }
+    }
+}
+
+
+echo "<h4>💬 Comments</h4>";
+showComments($comments);
+?>
+
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -132,6 +189,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     // Toggle replies
+    
     document.querySelectorAll('.toggle-replies').forEach(link => {
         link.addEventListener('click', function (e) {
             e.preventDefault();
@@ -143,6 +201,7 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         });
     });
+    
 
     // Auto open a reply thread (if open_reply param is set)
     <?php if (!empty($open_reply_id)) : ?>
@@ -155,5 +214,60 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php endif; ?>
 });
 </script>
+<style>
+.comment-box {
+  background: #f0f2f5;
+  border-radius: 10px;
+  padding: 10px 15px;
+  margin-bottom: 10px;
+  font-family: Arial, sans-serif;
+}
+
+.comment-author {
+  font-weight: bold;
+  color: #050505;
+  margin-bottom: 3px;
+}
+
+.comment-content {
+  margin-left: 5px;
+  margin-bottom: 8px;
+  white-space: pre-line;
+  color: #1c1e21;
+}
+
+.reply-link {
+  font-size: 13px;
+  color: #65676b;
+  cursor: pointer;
+  margin-left: 5px;
+  text-decoration: none;
+}
+
+.reply-link:hover {
+  text-decoration: underline;
+}
+
+.reply-form textarea {
+  width: 100%;
+  height: 50px;
+  margin-top: 5px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  padding: 5px;
+  font-family: Arial, sans-serif;
+}
+
+.reply-form button {
+  margin-top: 5px;
+  padding: 5px 10px;
+  background: #0866ff;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+</style>
+
 </body>
 </html>

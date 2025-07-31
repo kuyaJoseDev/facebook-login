@@ -73,13 +73,14 @@ if (isset($_GET['receiver_id'])) {
 
 
 <body>
-  <body>
+ 
 
   <!-- ✅ Stylish Logout Bar -->
   <div class="logout-bar">
     <!-- 🔗 Fixed Top Bar with Homepage Shortcut -->
 <div class="top-bar">
-  <a href="LeagueBook_Page.php" class="http://localhost/League-University/LeagueBook/LeagueBook_Page.php">HOME</a>
+ <a href="LeagueBook_Page.php" class="home-link">HOME</a>
+
 </div>
 
     <form action="LeagueBook.php" method="POST" class="logout-form">
@@ -91,22 +92,12 @@ if (isset($_GET['receiver_id'])) {
     </form>
   </div>
   <!-- Only visible on mobile -->
+<!-- ✅ Mobile Toggle Buttons Only -->
 <div class="mobile-toggle-section">
-
-  <button class="toggle-btn" onclick="toggleSection('online-offline')">👥 Show/Hide Online & Offline Users</button>
-  <div id="online-offline" class="toggle-content">
-    <!-- Your left-sidebar content here -->
-    <div class="online-users"> ... </div>
-    <div class="offline-users"> ... </div>
-  </div>
-
-  <button class="toggle-btn" onclick="toggleSection('suggested-users')">🔍 Show/Hide Suggestions</button>
-  <div id="suggested-users" class="toggle-content">
-    <!-- Your right-sidebar content here -->
-    <div class="user-suggestion"> ... </div>
-  </div>
-
+  <button class="toggle-btn" onclick="toggleSidebar('left-sidebar')">👥 Show/Hide Online & Offline Users</button>
+  <button class="toggle-btn" onclick="toggleSidebar('right-sidebar')">🔍 Show/Hide Suggestions</button>
 </div>
+
 
 
   <div class="main-container">
@@ -130,25 +121,52 @@ if (isset($_GET['receiver_id'])) {
     
 <!-- ✅ FIXED RIGHT SIDEBAR -->
 
-<div class="right-sidebar">
+<!-- Default hidden; visible only when "Show" is clicked -->
+ 
+<div class="right-sidebar hidden">
   <h3>🧑‍🤝‍🧑 People You May Know</h3>
-  <?php if (isset($friendRequestMessage)): ?>
-    <div class="alert-message"><?php echo $friendRequestMessage; ?></div>
-  <?php endif; ?>
+<?php
+$suggestQuery = $conn->prepare("
+  SELECT id, name FROM users
+  WHERE id != ?
+    AND id NOT IN (
+      SELECT CASE
+        WHEN user1_id = ? THEN user2_id
+        WHEN user2_id = ? THEN user1_id
+      END
+      FROM friends
+      WHERE user1_id = ? OR user2_id = ?
+    )
+    AND id NOT IN (
+      SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+    )
+    ORDER BY RAND() LIMIT 5
+");
+$suggestQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+$suggestQuery->execute();
+$suggestResult = $suggestQuery->get_result();
+
+while ($suggested = $suggestResult->fetch_assoc()):
+?>
+  <div class="user-suggestion">
+    <strong><?= htmlspecialchars($suggested['name']); ?></strong>
+    <form method="GET" action="LeagueBook_Page.php">
+      <input type="hidden" name="receiver_id" value="<?= (int)$suggested['id']; ?>">
+      <button type="submit">➕ Add Friend</button>
+    </form>
+  </div>
+<?php endwhile; ?>
+
   <!-- Suggested users list -->
 </div>
 
 
-
-
-
-<!-- ✅ FIXED LEFT SIDEBAR -->
-<div class="left-sidebar">
+<div class="left-sidebar hidden">
   <h4>🟢 Online Users</h4>
   <div class="online-users">
     <?php
     $onlineQuery = $conn->prepare("
-      SELECT u.id, u.name, u.last_active FROM users u
+      SELECT u.id, u.name, u.last_active FROM users u 
       WHERE u.id != ?
         AND u.id NOT IN (
           SELECT CASE
@@ -299,6 +317,13 @@ $share_link = "http://localhost/League-University/LeagueBook/view_post.php?id=$p
   <button>🔍 View Post</button>
 </a>
 <button onclick="copyToClipboard('<?php echo $share_link; ?>')">🔗 Share</button>
+<!-- Report Form -->
+<form action="report_system.php" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to report this post?');">
+  <input type="hidden" name="post_id" value="<?php echo $row['id']; ?>">
+  <input type="hidden" name="reason" value="Inappropriate content">
+  <button type="submit">🚨 Report</button>
+</form>
+
 
         <!-- Comment Form -->
         <form action="comment.php" method="POST" class="comment-form">
@@ -356,6 +381,62 @@ function toggleSection(id) {
   }
 }
 </script>
+<script>
+function toggleSidebar(className) {
+  // Prevent toggling if screen is 900px or less (mobile)
+  if (window.innerWidth <= 900) return;
+
+  const el = document.querySelector('.' + className);
+  if (!el) return;
+
+  el.classList.toggle('hidden');
+}
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // Show reply forms
+    document.querySelectorAll('.reply-link').forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const form = document.getElementById('reply-form-' + this.dataset.commentId);
+            if (form) {
+                form.style.display = form.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+    });
+
+    // ✅ INSERT THIS BELOW
+
+    document.querySelectorAll('.toggle-replies').forEach(link => {
+        link.addEventListener('click', function (e) {
+            e.preventDefault();
+            const target = document.getElementById(this.dataset.target);
+            if (target) {
+                const isVisible = target.style.display === 'block';
+                target.style.display = isVisible ? 'none' : 'block';
+                this.innerText = this.innerText.replace(isVisible ? '🔼 Hide' : '🔽 View', isVisible ? '🔽 View' : '🔼 Hide');
+            }
+        });
+    });
+
+    // Auto open a reply thread (if open_reply param is set)
+    <?php if (!empty($open_reply_id)) : ?>
+    const replyContainer = document.getElementById('replies-<?php echo $open_reply_id; ?>');
+    const toggleButton = document.querySelector('[data-target="replies-<?php echo $open_reply_id; ?>"]');
+    if (replyContainer && toggleButton) {
+        replyContainer.style.display = 'block';
+        toggleButton.innerText = toggleButton.innerText.replace('🔽 View', '🔼 Hide');
+    }
+    <?php endif; ?>
+});
+</script>
+
+
+
+
+
+
+
 
 </body>
 </html>
