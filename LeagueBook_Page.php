@@ -91,13 +91,6 @@ if (isset($_GET['receiver_id'])) {
 
     </form>
   </div>
-  <!-- Only visible on mobile -->
-<!-- ✅ Mobile Toggle Buttons Only -->
-<div class="mobile-toggle-section">
-  <button class="toggle-btn" onclick="toggleSidebar('left-sidebar')">👥 Show/Hide Online & Offline Users</button>
-  <button class="toggle-btn" onclick="toggleSidebar('right-sidebar')">🔍 Show/Hide Suggestions</button>
-</div>
-
 
 
   <div class="main-container">
@@ -122,43 +115,56 @@ if (isset($_GET['receiver_id'])) {
 <!-- ✅ FIXED RIGHT SIDEBAR -->
 
 <!-- Default hidden; visible only when "Show" is clicked -->
- 
-<div class="right-sidebar hidden">
-  <h3>🧑‍🤝‍🧑 People You May Know</h3>
-<?php
-$suggestQuery = $conn->prepare("
-  SELECT id, name FROM users
-  WHERE id != ?
-    AND id NOT IN (
-      SELECT CASE
-        WHEN user1_id = ? THEN user2_id
-        WHEN user2_id = ? THEN user1_id
-      END
-      FROM friends
-      WHERE user1_id = ? OR user2_id = ?
-    )
-    AND id NOT IN (
-      SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
-    )
-    ORDER BY RAND() LIMIT 5
-");
-$suggestQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
-$suggestQuery->execute();
-$suggestResult = $suggestQuery->get_result();
+<!-- 🔘 Mobile Toggle Button -->
+ <!-- 🔳 Overlay (hidden by default) -->
+<!-- 🔳 Overlay Background -->
+<!-- 🔳 Overlay (click to close) -->
+<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleRightSidebar()"></div>
 
-while ($suggested = $suggestResult->fetch_assoc()):
-?>
-  <div class="user-suggestion">
-    <strong><?= htmlspecialchars($suggested['name']); ?></strong>
-    <form method="GET" action="LeagueBook_Page.php">
-      <input type="hidden" name="receiver_id" value="<?= (int)$suggested['id']; ?>">
-      <button type="submit">➕ Add Friend</button>
-    </form>
-  </div>
-<?php endwhile; ?>
-
-  <!-- Suggested users list -->
+<!-- 📱 Mobile toggle button -->
+<div class="mobile-toggle-section">
+  <button class="toggle-btn" onclick="toggleRightSidebar()">
+    🔍 Show/Hide Suggestions
+  </button>
 </div>
+<!-- 📦 Right Sidebar -->
+<div id="right-sidebar" class="right-sidebar">
+  <h3>🧑‍🤝‍🧑 People You May Know</h3>
+  <?php
+  $suggestQuery = $conn->prepare("
+    SELECT id, name FROM users
+    WHERE id != ?
+      AND id NOT IN (
+        SELECT CASE
+          WHEN user1_id = ? THEN user2_id
+          WHEN user2_id = ? THEN user1_id
+        END
+        FROM friends
+        WHERE user1_id = ? OR user2_id = ?
+      )
+      AND id NOT IN (
+        SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+      )
+    ORDER BY RAND() LIMIT 5
+  ");
+  $suggestQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+  $suggestQuery->execute();
+  $suggestResult = $suggestQuery->get_result();
+
+  while ($suggested = $suggestResult->fetch_assoc()):
+  ?>
+    <div class="user-suggestion">
+      <strong><?= htmlspecialchars($suggested['name']); ?></strong>
+      <form method="GET" action="LeagueBook_Page.php">
+        <input type="hidden" name="receiver_id" value="<?= (int)$suggested['id']; ?>">
+        <button type="submit">➕ Add Friend</button>
+      </form>
+    </div>
+  <?php endwhile; ?>
+</div>
+
+
+
 
 
 <div class="left-sidebar hidden">
@@ -372,26 +378,39 @@ $share_link = "http://localhost/League-University/LeagueBook/view_post.php?id=$p
   });
 </script>
 <script>
-function toggleSection(id) {
-  const section = document.getElementById(id);
-  if (section.style.display === "block") {
-    section.style.display = "none";
-  } else {
-    section.style.display = "block";
+function toggleRightSidebar() {
+  const sidebar = document.getElementById("right-sidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+
+  if (window.innerWidth <= 900) {
+    const isOpen = sidebar.classList.toggle("show");
+    overlay.classList.toggle("show", isOpen);
+
+    // Click outside closes sidebar
+    if (isOpen) {
+      document.addEventListener("click", closeOnClickOutside);
+    } else {
+      document.removeEventListener("click", closeOnClickOutside);
+    }
+  }
+}
+
+function closeOnClickOutside(e) {
+  const sidebar = document.getElementById("right-sidebar");
+  const overlay = document.getElementById("sidebarOverlay");
+  const toggleBtn = document.querySelector(".toggle-btn");
+
+  if (
+    !sidebar.contains(e.target) &&
+    !toggleBtn.contains(e.target)
+  ) {
+    sidebar.classList.remove("show");
+    overlay.classList.remove("show");
+    document.removeEventListener("click", closeOnClickOutside);
   }
 }
 </script>
-<script>
-function toggleSidebar(className) {
-  // Prevent toggling if screen is 900px or less (mobile)
-  if (window.innerWidth <= 900) return;
 
-  const el = document.querySelector('.' + className);
-  if (!el) return;
-
-  el.classList.toggle('hidden');
-}
-</script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     // Show reply forms
