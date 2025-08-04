@@ -16,7 +16,7 @@ if (!is_numeric($profileUserId) || $profileUserId <= 0) {
 }
 
 // Fetch profile user data
-$stmt = $conn->prepare("SELECT id, name, email FROM users WHERE id = ?");
+$stmt = $conn->prepare("SELECT id, name, email, last_active FROM users WHERE id = ?");
 $stmt->bind_param("i", $profileUserId);
 $stmt->execute();
 $user = $stmt->get_result()->fetch_assoc();
@@ -24,96 +24,42 @@ $user = $stmt->get_result()->fetch_assoc();
 if (!$user) {
     die("User not found.");
 }
-?>
 
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>View Profile - <?php echo htmlspecialchars($user['name']); ?></title>
+    <title>View Profile - <?= htmlspecialchars($user['name']) ?></title>
     <link rel="stylesheet" href="LeagueBook_Page.css">
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const form = document.getElementById('friend-request-form');
-        if (form) {
-            form.addEventListener('submit', function (e) {
-                e.preventDefault();
-
-                const receiverId = form.querySelector('[name="receiver_id"]').value;
-
-                fetch('send_friend_request.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded'
-                    },
-                    body: 'receiver_id=' + encodeURIComponent(receiverId)
-                })
-                .then(res => res.json())
-                .then(data => {
-                    const status = document.getElementById('request-status');
-                    status.textContent = data.message;
-                    status.style.color = data.success ? 'green' : 'orange';
-
-                    if (data.success || data.message.includes('already')) {
-                        document.getElementById('send-request-btn').disabled = true;
-                    }
-                })
-                .catch(() => {
-                    const status = document.getElementById('request-status');
-                    status.textContent = '❌ Something went wrong.';
-                    status.style.color = 'red';
-                });
-            });
-        }
-    });
-    // Already friends
-$isFriend = $conn->prepare("SELECT * FROM friends WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)");
-$isFriend->bind_param("iiii", $myId, $otherId, $otherId, $myId);
-$isFriend->execute();
-$res = $isFriend->get_result();
-
-if ($res->num_rows > 0) {
-    // Show "Already Friends" or no button
-}
-
-    </script>
 </head>
 <body>
 <div class="main-container">
-    <?php if (isset($_GET['success'])): ?>
-        <div style="color: green;">
-            <?php
-            if ($_GET['success'] === 'request_sent') {
-                echo "✅ Friend request sent successfully.";
-            } elseif ($_GET['success'] === 'already_sent') {
-                echo "⚠️ You already sent a friend request to this user.";
-            }
-            ?>
-        </div>
-    <?php endif; ?>
-
-    <?php if (isset($_GET['error']) && $_GET['error'] === 'self_request'): ?>
-        <div style="color: red;">
-            ⚠️ You cannot send a friend request to yourself.
-        </div>
-    <?php endif; ?>
-
     <a href="LeagueBook_Page.php"><button class="button">🏠 Back to LeagueBook</button></a>
 
-    <h2>👤 Profile: <?php echo htmlspecialchars($user['name']); ?></h2>
-    <p>Email: <?php echo htmlspecialchars($user['email']); ?></p>
+    <h2>👤 Profile: <?= htmlspecialchars($user['name']) ?> <?= getStatusToken($user['last_active']) ?></h2>
+    <p>Email: <?= htmlspecialchars($user['email']) ?></p>
 
-    <?php if ($loggedInUserId != $user['id']): ?>
-        <!-- AJAX Friend Request Form -->
-        <form id="friend-request-form" method="POST" style="margin-top: 10px;">
-            <input type="hidden" name="receiver_id" value="<?php echo (int)$user['id']; ?>">
-            <button type="submit" id="send-request-btn">➕ Add Friend</button>
-        </form>
-        <div id="request-status" style="margin-top: 5px;"></div>
+    <?php if ($loggedInUserId !== $user['id']): ?>
+        <?php if (isFriend($conn, $loggedInUserId, $user['id'])): ?>
+            <div class="friend-status">
+                <span style="color: blue;">✅ Already Friends</span><br>
+                <?php if (hasMutualFriend($conn, $loggedInUserId, $user['id'])): ?>
+                    <span style="color: green;">🤞 Mutual Friend</span>
+                <?php else: ?>
+                    <span style="color: blue;">No Mutual Friends</span>
+                <?php endif; ?>
+            </div>
+        <?php else: ?>
+            <form method="GET" action="LeagueBook_Page.php">
+                <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
+                <button type="submit">➕ Add Friend</button>
+            </form>
+        <?php endif; ?>
     <?php endif; ?>
 
     <hr>
-    <h3>📝 Posts by <?php echo htmlspecialchars($user['name']); ?>:</h3>
+    <h3>📝 Posts by <?= htmlspecialchars($user['name']) ?>:</h3>
 
     <?php
     $pstmt = $conn->prepare("SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC");
@@ -127,22 +73,17 @@ if ($res->num_rows > 0) {
         while ($post = $posts->fetch_assoc()):
     ?>
         <div class="post-box">
-            <p><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
-
+            <p><?= nl2br(htmlspecialchars($post['content'])) ?></p>
             <?php if (!empty($post['image_path'])): ?>
-                <img src="<?php echo htmlspecialchars($post['image_path']); ?>" style="max-width: 100%; height: auto;"><br>
+                <img src="<?= htmlspecialchars($post['image_path']) ?>" style="max-width: 100%; height: auto;"><br>
             <?php endif; ?>
-
-            <small>Posted on: <?php echo $post['created_at']; ?></small><br>
+            <small>Posted on: <?= $post['created_at'] ?></small><br>
             <?php if (!empty($post['updated_at'])): ?>
-                <small><i>Edited on: <?php echo $post['updated_at']; ?></i></small>
+                <small><i>Edited on: <?= $post['updated_at'] ?></i></small>
             <?php endif; ?>
         </div>
         <hr>
-    <?php
-        endwhile;
-    }
-    ?>
+    <?php endwhile; } ?>
 </div>
 </body>
 </html>

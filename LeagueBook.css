@@ -180,9 +180,6 @@ body {
   color: #555;
 }
 
-
-
-
 @media (max-width: 1100px) {
   .face_login {
     position: static;

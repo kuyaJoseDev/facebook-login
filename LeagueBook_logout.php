@@ -1,7 +1,16 @@
 <?php
 session_start();
-if (!isset($_SESSION['email'])) {
-    header("Location: LeagueBook.php");
-    exit();
-}
+include("connect.php");
+
+$offline = $conn->prepare("UPDATE users SET online_status = 'offline' WHERE id = ?");
+$offline->bind_param("i", $_SESSION['user_id']);
+$offline->execute();
+
+session_unset();
+session_destroy();
+
+header("Location: LeagueBook.php");
+exit();
+
+
 ?>

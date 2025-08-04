@@ -1,6 +1,9 @@
 <?php
 session_start();
 include("connect.php");
+
+
+
 $update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
 $update->bind_param("i", $_SESSION['user_id']);
 $update->execute();
@@ -43,6 +46,19 @@ if (isset($_GET['receiver_id'])) {
     }
 }
 
+// ✅ Fetch updated online_status for display
+// ✅ Get the user's last_active timestamp
+$getStatus = $conn->prepare("SELECT last_active FROM users WHERE id = ?");
+$getStatus->bind_param("i", $_SESSION['user_id']);
+$getStatus->execute();
+$result = $getStatus->get_result();
+$user = $result->fetch_assoc();
+
+if ($user && (time() - strtotime($user['last_active']) <= 120)) {
+    echo "🟢 Online";
+} else {
+    echo "⚫ Offline";
+}
 
 ?>
 <!DOCTYPE html>
@@ -105,28 +121,17 @@ if (isset($_GET['receiver_id'])) {
       <span class="badge"><?php echo $pending; ?></span>
     <?php endif; ?>
   </a>
-</div>
-    
+</div>    
+<?php if (isset($_SESSION['is_admin']) && $_SESSION['is_admin']): ?>
+  <a href="admin_report.php" style="color:red; font-weight:bold;">🚨 Admin Reports</a>
+<?php endif; ?>
 
     <h2>👋 Welcome, <?php echo htmlspecialchars($userName); ?>!</h2>
 
-    
-    
-<!-- ✅ FIXED RIGHT SIDEBAR -->
-
-<!-- Default hidden; visible only when "Show" is clicked -->
-<!-- 🔘 Mobile Toggle Button -->
- <!-- 🔳 Overlay (hidden by default) -->
-<!-- 🔳 Overlay Background -->
-<!-- 🔳 Overlay (click to close) -->
-<div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleRightSidebar()"></div>
-
-<!-- 📱 Mobile toggle button -->
-<div class="mobile-toggle-section">
-  <button class="toggle-btn" onclick="toggleRightSidebar()">
-    🔍 Show/Hide Suggestions
-  </button>
 </div>
+<button class="toggle-btn" onclick="toggleSidebar('left-sidebar')">👥Online/Offline Users</button>
+<button class="toggle-btn" onclick="toggleSidebar('right-sidebar')">🧑‍🤝‍🧑 Peope You May Know</button>
+
 <!-- 📦 Right Sidebar -->
 <div id="right-sidebar" class="right-sidebar">
   <h3>🧑‍🤝‍🧑 People You May Know</h3>
@@ -155,51 +160,45 @@ if (isset($_GET['receiver_id'])) {
   ?>
     <div class="user-suggestion">
       <strong><?= htmlspecialchars($suggested['name']); ?></strong>
-      <form method="GET" action="LeagueBook_Page.php">
-        <input type="hidden" name="receiver_id" value="<?= (int)$suggested['id']; ?>">
+       <form method="GET" action="LeagueBook_Page.php">
+        <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
         <button type="submit">➕ Add Friend</button>
       </form>
     </div>
   <?php endwhile; ?>
 </div>
-
-
-
-
-
-<div class="left-sidebar hidden">
+<!-- 📦 Left Sidebar -->
+<div id="left-sidebar" class="left-sidebar">
   <h4>🟢 Online Users</h4>
   <div class="online-users">
     <?php
     $onlineQuery = $conn->prepare("
-      SELECT u.id, u.name, u.last_active FROM users u 
+      SELECT u.id, u.name, u.last_active
+      FROM users u
       WHERE u.id != ?
-        AND u.id NOT IN (
+        AND u.id IN (
           SELECT CASE
-                   WHEN user1_id = ? THEN user2_id
-                   WHEN user2_id = ? THEN user1_id
-                 END
+            WHEN user1_id = ? THEN user2_id
+            ELSE user1_id
+          END
           FROM friends
-          WHERE user1_id = ? OR user2_id = ?
-        )
-        AND u.id NOT IN (
-          SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+          WHERE ? IN (user1_id, user2_id)
         )
     ");
-    $onlineQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+    $onlineQuery->bind_param("iii", $userId, $userId, $userId);
     $onlineQuery->execute();
     $onlineResult = $onlineQuery->get_result();
 
     while ($user = $onlineResult->fetch_assoc()):
-      $isOnline = (strtotime($user['last_active']) > strtotime('-2 minutes'));
+      $isOnline = (time() - strtotime($user['last_active'])) <= 120;
       if ($isOnline):
     ?>
       <div class="user-suggestion">
-        <strong><?= htmlspecialchars($user['name']); ?> 🟢 Online</strong>
-        <form method="GET" action="LeagueBook_Page.php">
-          <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
-          <button type="submit">➕ Add Friend</button>
-        </form>
+        <strong>
+          <?= htmlspecialchars($user['name']); ?>
+          <?= getStatusToken($user['last_active']); ?>
+        </strong>
+        <!-- No Add Friend button because they're already friends -->
       </div>
     <?php endif; endwhile; ?>
   </div>
@@ -208,40 +207,36 @@ if (isset($_GET['receiver_id'])) {
   <div class="offline-users">
     <?php
     $offlineQuery = $conn->prepare("
-      SELECT u.id, u.name, u.last_active FROM users u
+      SELECT u.id, u.name, u.last_active
+      FROM users u
       WHERE u.id != ?
-        AND u.id NOT IN (
+        AND u.id IN (
           SELECT CASE
-                   WHEN user1_id = ? THEN user2_id
-                   WHEN user2_id = ? THEN user1_id
-                 END
+            WHEN user1_id = ? THEN user2_id
+            ELSE user1_id
+          END
           FROM friends
-          WHERE user1_id = ? OR user2_id = ?
-        )
-        AND u.id NOT IN (
-          SELECT receiver_id FROM friend_requests WHERE sender_id = ? AND status = 'pending'
+          WHERE ? IN (user1_id, user2_id)
         )
     ");
-    $offlineQuery->bind_param("iiiiii", $userId, $userId, $userId, $userId, $userId, $userId);
+    $offlineQuery->bind_param("iii", $userId, $userId, $userId);
     $offlineQuery->execute();
     $offlineResult = $offlineQuery->get_result();
 
     while ($user = $offlineResult->fetch_assoc()):
-      $isOnline = (strtotime($user['last_active']) > strtotime('-2 minutes'));
+      $isOnline = (time() - strtotime($user['last_active'])) <= 120;
       if (!$isOnline):
     ?>
       <div class="user-suggestion">
-        <strong><?= htmlspecialchars($user['name']); ?> ⚫ Offline</strong>
-        <form method="GET" action="LeagueBook_Page.php">
-          <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
-          <button type="submit">➕ Add Friend</button>
-        </form>
+        <strong>
+          <?= htmlspecialchars($user['name']); ?>
+          <?= getStatusToken($user['last_active']); ?>
+        </strong>
+        <!-- No Add Friend button because they're already friends -->
       </div>
     <?php endif; endwhile; ?>
   </div>
 </div>
-
-
 
     <!-- Post Form -->
     <form action="Post.php" method="POST" enctype="multipart/form-data" class="post-form">
@@ -377,39 +372,6 @@ $share_link = "http://localhost/League-University/LeagueBook/view_post.php?id=$p
     }, 500);
   });
 </script>
-<script>
-function toggleRightSidebar() {
-  const sidebar = document.getElementById("right-sidebar");
-  const overlay = document.getElementById("sidebarOverlay");
-
-  if (window.innerWidth <= 900) {
-    const isOpen = sidebar.classList.toggle("show");
-    overlay.classList.toggle("show", isOpen);
-
-    // Click outside closes sidebar
-    if (isOpen) {
-      document.addEventListener("click", closeOnClickOutside);
-    } else {
-      document.removeEventListener("click", closeOnClickOutside);
-    }
-  }
-}
-
-function closeOnClickOutside(e) {
-  const sidebar = document.getElementById("right-sidebar");
-  const overlay = document.getElementById("sidebarOverlay");
-  const toggleBtn = document.querySelector(".toggle-btn");
-
-  if (
-    !sidebar.contains(e.target) &&
-    !toggleBtn.contains(e.target)
-  ) {
-    sidebar.classList.remove("show");
-    overlay.classList.remove("show");
-    document.removeEventListener("click", closeOnClickOutside);
-  }
-}
-</script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
@@ -450,12 +412,54 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 
+<script>
+function toggleSidebar(id) {
+  const sidebar = document.getElementById(id);
+  if (sidebar.classList.contains('sidebar-visible')) {
+    sidebar.classList.remove('sidebar-visible');
+    setTimeout(() => sidebar.classList.add('hidden'), 300);
+  } else {
+    sidebar.classList.remove('hidden');
+    setTimeout(() => sidebar.classList.add('sidebar-visible'), 10);
+  }
+}
+document.addEventListener('click', function(event) {
+  const leftSidebar = document.getElementById('left-sidebar');
+  const rightSidebar = document.getElementById('right-sidebar');
 
+  if (!leftSidebar.contains(event.target) && !event.target.closest('[onclick*="left-sidebar"]')) {
+    leftSidebar.classList.remove('sidebar-visible');
+    setTimeout(() => leftSidebar.classList.add('hidden'), 300);
+  }
 
+  if (!rightSidebar.contains(event.target) && !event.target.closest('[onclick*="right-sidebar"]')) {
+    rightSidebar.classList.remove('sidebar-visible');
+    setTimeout(() => rightSidebar.classList.add('hidden'), 300);
+  }
+});
+function toggleSidebar(id) {
+  const sidebar = document.getElementById(id);
 
+  if (sidebar.classList.contains('sidebar-visible')) {
+    // First, remove the visible class to trigger the slide-out animation
+    sidebar.classList.remove('sidebar-visible');
 
+    // After transition ends (300ms), add the hidden class to fully hide it
+    setTimeout(() => {
+      sidebar.classList.add('hidden');
+    }, 300); // match this with your CSS transition duration
+  } else {
+    // Show sidebar
+    sidebar.classList.remove('hidden');
 
+    // Allow time for DOM to update before triggering the animation
+    setTimeout(() => {
+      sidebar.classList.add('sidebar-visible');
+    }, 10); // slight delay allows transition to work smoothly
+  }
+}
 
+</script>
 
 </body>
 </html>

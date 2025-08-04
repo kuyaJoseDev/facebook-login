@@ -103,9 +103,15 @@ if (isset($_GET['shared_by'])) {
             
             <button class="button">⬅ Back to Home</button>
 
-        </a>
+        </a><br>
     </div>
-    
+    <?php if (!empty($post['video_path'])): ?>
+    <video width="100%" autoplay controls >
+        <source src="<?= htmlspecialchars($post['video_path']); ?>" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+<?php endif; ?>
+
 
     <h2><?php echo htmlspecialchars($post['user_name']); ?>'s Post</h2>
     <p><?php echo nl2br(htmlspecialchars($post['content'])); ?></p>
@@ -214,60 +220,30 @@ document.addEventListener('DOMContentLoaded', function () {
     <?php endif; ?>
 });
 </script>
-<style>
-.comment-box {
-  background: #f0f2f5;
-  border-radius: 10px;
-  padding: 10px 15px;
-  margin-bottom: 10px;
-  font-family: Arial, sans-serif;
-}
+<?php while ($row = $result->fetch_assoc()): ?>
+  <div class="post-box">
+    <h4><?= htmlspecialchars($row['user_name']) ?></h4>
+    <p><?= htmlspecialchars($row['content']) ?></p>
 
-.comment-author {
-  font-weight: bold;
-  color: #050505;
-  margin-bottom: 3px;
-}
+    <!-- 🛑 Report Link (Shown Under Each Post) -->
+    <p style="color: red; cursor: pointer;" onclick="confirmReport<?= $row['id'] ?>()">
+      Are you sure you want to report this post?
+    </p>
 
-.comment-content {
-  margin-left: 5px;
-  margin-bottom: 8px;
-  white-space: pre-line;
-  color: #1c1e21;
-}
+    <form id="reportForm<?= $row['id'] ?>" action="report_post.php" method="POST" style="display: none;">
+      <input type="hidden" name="post_id" value="<?= $row['id'] ?>">
+    </form>
 
-.reply-link {
-  font-size: 13px;
-  color: #65676b;
-  cursor: pointer;
-  margin-left: 5px;
-  text-decoration: none;
-}
+    <script>
+      function confirmReport<?= $row['id'] ?>() {
+        if (confirm("Are you sure you want to report this post?")) {
+          document.getElementById('reportForm<?= $row['id'] ?>').submit();
+        }
+      }
+    </script>
+  </div>
+<?php endwhile; ?>
 
-.reply-link:hover {
-  text-decoration: underline;
-}
-
-.reply-form textarea {
-  width: 100%;
-  height: 50px;
-  margin-top: 5px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  padding: 5px;
-  font-family: Arial, sans-serif;
-}
-
-.reply-form button {
-  margin-top: 5px;
-  padding: 5px 10px;
-  background: #0866ff;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-}
-</style>
 
 </body>
 </html>

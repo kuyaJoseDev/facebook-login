@@ -11,6 +11,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $email = $_POST['email'] ?? '';
         $password = $_POST['password'] ?? '';
         $confirm = $_POST['confirm'] ?? '';
+        
 
         if (empty($name) || empty($email) || empty($password) || empty($confirm)) {
             header("Location: LeagueBook.php?error=empty");
@@ -57,9 +58,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
         if ($user = $result->fetch_assoc()) {
             if (password_verify($password, $user['password'])) {
-                $_SESSION['email'] = $user['email'];
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['user_name'] = $user['name'];
+               $_SESSION['user_id'] = $user['id'];
+               $_SESSION['email'] = $user['email'];
+               $_SESSION['user_name'] = $user['name'];
+               $_SESSION['is_admin'] = $user['is_admin']; // ✅ Must be set here
+               
                 header("Location: LeagueBook_Page.php");
                 exit();
             }

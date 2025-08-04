@@ -3,7 +3,7 @@ session_start();
 include("connect.php");
 
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['report_post_id'])) {
-    header("Location: LeagueBook.php");
+    header("Location: admin_report.php");
     exit();
 }
 
