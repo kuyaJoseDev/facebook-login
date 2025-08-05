@@ -2,15 +2,16 @@
 session_start();
 include("connect.php");
 
-$offline = $conn->prepare("UPDATE users SET online_status = 'offline' WHERE id = ?");
-$offline->bind_param("i", $_SESSION['user_id']);
-$offline->execute();
+if (isset($_SESSION['user_id'])) {
+    $update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
+    $update->bind_param("i", $_SESSION['user_id']);
+    $update->execute();
+}
 
+// Destroy session
 session_unset();
 session_destroy();
-
 header("Location: LeagueBook.php");
 exit();
-
 
 ?>

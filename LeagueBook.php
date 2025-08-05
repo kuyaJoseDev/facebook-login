@@ -136,13 +136,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
       <div class="input_box">
         <input type="email" name="email" placeholder="Enter your email address" required />
-        <i class="uil uil-envelope-alt email"></i>
+      
       </div>
+        <i class="uil uil-envelope-alt email"></i>
       <div class="input_box">
         <input type="password" name="password" id="login_password" placeholder="Enter your password" required />
-        <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye pw_toggle" toggle="login_password"></i>
+
       </div>
+      <i class="uil uil-lock password"></i>
+        <i class="uil uil-eye pw_toggle" toggle="login_password"></i>
 
       <button class="button" type="submit">Login</button>
 

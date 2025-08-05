@@ -2,7 +2,25 @@
 session_start();
 include("connect.php");
 
+// Make sure this is after session_start() and include("connect.php")
+$unreadCount = 0; // Default value in case the query fails
 
+if (isset($_SESSION['user_id'])) {
+    $userId = $_SESSION['user_id'];
+
+    $stmt = $conn->prepare("
+        SELECT COUNT(*) AS unread_count 
+        FROM private_messages 
+        WHERE receiver_id = ? AND is_read = 0
+    ");
+    $stmt->bind_param("i", $userId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    if ($row = $result->fetch_assoc()) {
+        $unreadCount = $row['unread_count'];
+    }
+}
 
 $update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
 $update->bind_param("i", $_SESSION['user_id']);
@@ -60,6 +78,7 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
     echo "⚫ Offline";
 }
 
+
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -86,6 +105,19 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
     <p>Loading LeagueBook...</p>
   </div>
 </div>
+<?php
+session_start();
+include("connect.php");
+
+if (!isset($_SESSION['user_id'])) {
+    http_response_code(403);
+    exit("Unauthorized");
+}
+
+$update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
+$update->bind_param("i", $_SESSION['user_id']);
+$update->execute();
+?>
 
 
 <body>
@@ -98,6 +130,15 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
  <a href="LeagueBook_Page.php" class="home-link">HOME</a>
 
 </div>
+<div id="chatBox" style="display:none; border:1px solid gray; padding:10px;">
+  <h4 id="chatHeader">Chat</h4>
+  <div id="chatMessages" style="height:300px; overflow-y:scroll; border:1px solid #ccc;"></div>
+  <form onsubmit="sendMessage(event)">
+    <input type="text" id="chatInput" placeholder="Type a message..." required>
+    <button type="submit">Send</button>
+  </form>
+</div>
+
 
     <form action="LeagueBook.php" method="POST" class="logout-form">
       <span>👤 Logged in as: <strong><?php echo htmlspecialchars($userName); ?></strong></span>
@@ -112,7 +153,14 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
   <div class="main-container">
     <!-- Your layout with left-sidebar, wrapper, right-sidebar -->
 
-  <div class="main-container">
+  <div class="main-container"> 
+<a href="inbox.php" class="button">
+  📩 Inbox <?= $unreadCount > 0 ? "<span class='badge'>$unreadCount</span>" : "" ?>
+</a>
+
+
+
+
     
 <div class="friend-request-container">
   <a href="view_friend_request.php" class="friend-request-link">
@@ -459,6 +507,50 @@ function toggleSidebar(id) {
   }
 }
 
+
+</script>
+<script>
+  let chatUserId = null;
+
+  function openChat(userId, userName) {
+    chatUserId = userId;
+    document.getElementById("chatHeader").innerText = `Chat with ${userName}`;
+    document.getElementById("chatBox").style.display = "block";
+    loadMessages();
+    setInterval(loadMessages, 3000); // auto-refresh
+  }
+
+  function loadMessages() {
+    if (!chatUserId) return;
+    fetch("load_messages.php?user_id=" + chatUserId)
+      .then(res => res.text())
+      .then(data => {
+        document.getElementById("chatMessages").innerHTML = data;
+        const chatMessages = document.getElementById("chatMessages");
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      });
+  }
+
+  function sendMessage(e) {
+    e.preventDefault();
+    const input = document.getElementById("chatInput");
+    const msg = input.value.trim();
+    if (!msg || !chatUserId) return;
+
+    fetch("send_message.php", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `receiver_id=${chatUserId}&message=${encodeURIComponent(msg)}`
+    }).then(() => {
+      input.value = '';
+      loadMessages();
+    });
+  }
+</script>
+<script>
+setInterval(() => {
+  fetch('update_last_active.php');
+}, 60000); // every 60 seconds
 </script>
 
 </body>

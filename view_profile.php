@@ -7,6 +7,7 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+
 $loggedInUserId = $_SESSION['user_id'];
 $profileUserId = $_GET['id'] ?? null;
 
@@ -25,41 +26,89 @@ if (!$user) {
     die("User not found.");
 }
 
+// Escape variables for output once
+$escapedName = htmlspecialchars($user['name']);
+$escapedEmail = htmlspecialchars($user['email']);
+$escapedUserId = (int) $user['id'];
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>View Profile - <?= htmlspecialchars($user['name']) ?></title>
+    <title>View Profile - <?= $escapedName ?></title>
     <link rel="stylesheet" href="LeagueBook_Page.css">
 </head>
 <body>
 <div class="main-container">
-    <a href="LeagueBook_Page.php"><button class="button">🏠 Back to LeagueBook</button></a>
+    <a href="LeagueBook_Page.php">
+        <button class="button">🏠 Back to LeagueBook</button>
+    </a>
 
-    <h2>👤 Profile: <?= htmlspecialchars($user['name']) ?> <?= getStatusToken($user['last_active']) ?></h2>
-    <p>Email: <?= htmlspecialchars($user['email']) ?></p>
+    <div class="profile-wrapper">
+        <h2 class="profile-title">
+            👤 Profile: <?= $escapedName ?>
+            <?= getStatusToken($user['last_active']) ?>
+        </h2>
 
-    <?php if ($loggedInUserId !== $user['id']): ?>
-        <?php if (isFriend($conn, $loggedInUserId, $user['id'])): ?>
-            <div class="friend-status">
-                <span style="color: blue;">✅ Already Friends</span><br>
-                <?php if (hasMutualFriend($conn, $loggedInUserId, $user['id'])): ?>
-                    <span style="color: green;">🤞 Mutual Friend</span>
+        <p class="profile-email">📧 Email: <?= $escapedEmail ?></p>
+
+        <?php if ($loggedInUserId !== $escapedUserId): ?>
+            <div class="friend-actions">
+
+                <?php if (isFriend($conn, $loggedInUserId, $escapedUserId)): ?>
+                    <span class="badge badge-friend">✅ Already Friends</span>
+<br>
+                    <?php if (hasMutualFriend($conn, $loggedInUserId, $escapedUserId)): ?>
+                        <span class="badge badge-mutual">🤞 Mutual Friend</span>
+                    <?php else: ?>
+                        <span class="badge badge-no-mutual">No Mutual Friends</span>
+                    <?php endif; ?>
+
                 <?php else: ?>
-                    <span style="color: blue;">No Mutual Friends</span>
+                    <form method="GET" action="LeagueBook_Page.php" class="inline-form">
+                        <input type="hidden" name="receiver_id" value="<?= $escapedUserId ?>">
+                        <button type="submit" class="btn btn-friend">➕ Add Friend</button>
+                    </form>
                 <?php endif; ?>
+                <?php if (isset($_GET['success'])): ?>
+  <div class="success_message"><?= htmlspecialchars($_GET['success']) ?></div>
+<?php elseif (isset($_GET['error'])): ?>
+  <div class="error_message"><?= htmlspecialchars($_GET['error']) ?></div>
+<?php endif; ?>
+
+
+                <!-- 💬 Private Message Button -->
+<form method="POST" action="send_message.php" style="margin-top: 15px;">
+  <input type="hidden" name="receiver_id" value="<?= htmlspecialchars($escapedUserId) ?>">
+  
+  <textarea 
+    name="message" 
+    placeholder="Write your message..." 
+    required 
+    style="width:100%; height: 80px; margin-bottom:10px; padding: 10px; border-radius: 6px; border: 1px solid #ccc;"
+  ></textarea>
+  
+<!-- 💬 Private Message Button -->
+<button 
+  onclick="openChat(<?= (int)$user['id']; ?>, '<?= htmlspecialchars($user['name']); ?>')" 
+  class="btn btn-message"
+>
+  💬 Send Message
+</button>
+
+<!-- 📩 View Message Thread Link -->
+<a href="messages.php?user_id=<?= $user['id'] ?>" class="button">📩 View Messages</a>
+
+</form>
+
+
+
             </div>
-        <?php else: ?>
-            <form method="GET" action="LeagueBook_Page.php">
-                <input type="hidden" name="receiver_id" value="<?= (int)$user['id']; ?>">
-                <button type="submit">➕ Add Friend</button>
-            </form>
         <?php endif; ?>
-    <?php endif; ?>
+    </div>
 
     <hr>
-    <h3>📝 Posts by <?= htmlspecialchars($user['name']) ?>:</h3>
+    <h3>📝 Posts by <?= $escapedName ?>:</h3>
 
     <?php
     $pstmt = $conn->prepare("SELECT * FROM posts WHERE user_id = ? ORDER BY created_at DESC");
@@ -67,23 +116,27 @@ if (!$user) {
     $pstmt->execute();
     $posts = $pstmt->get_result();
 
-    if ($posts->num_rows === 0) {
-        echo "<p>No posts yet.</p>";
-    } else {
+    if ($posts->num_rows === 0): ?>
+        <p>No posts yet.</p>
+    <?php else:
         while ($post = $posts->fetch_assoc()):
+            $postContent = nl2br(htmlspecialchars($post['content']));
+            $imagePath = htmlspecialchars($post['image_path']);
+            $createdAt = $post['created_at'];
+            $updatedAt = $post['updated_at'] ?? '';
     ?>
         <div class="post-box">
-            <p><?= nl2br(htmlspecialchars($post['content'])) ?></p>
-            <?php if (!empty($post['image_path'])): ?>
-                <img src="<?= htmlspecialchars($post['image_path']) ?>" style="max-width: 100%; height: auto;"><br>
+            <p><?= $postContent ?></p>
+            <?php if (!empty($imagePath)): ?>
+                <img src="<?= $imagePath ?>" alt="Post Image"><br>
             <?php endif; ?>
-            <small>Posted on: <?= $post['created_at'] ?></small><br>
-            <?php if (!empty($post['updated_at'])): ?>
-                <small><i>Edited on: <?= $post['updated_at'] ?></i></small>
+            <small>Posted on: <?= $createdAt ?></small><br>
+            <?php if (!empty($updatedAt)): ?>
+                <small><i>Edited on: <?= $updatedAt ?></i></small>
             <?php endif; ?>
         </div>
         <hr>
-    <?php endwhile; } ?>
+    <?php endwhile; endif; ?>
 </div>
 </body>
 </html>
