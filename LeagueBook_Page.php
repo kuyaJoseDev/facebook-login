@@ -63,7 +63,17 @@ if (isset($_GET['receiver_id'])) {
         $friendRequestMessage = "⚠️ You cannot send a friend request to yourself.";
     }
 }
+// Mark offline automatically
+$conn->query("UPDATE users SET status='offline' 
+             WHERE TIMESTAMPDIFF(SECOND, last_active, NOW()) > 120");
 
+$timeout_seconds = 120; // 2 minutes
+$sql = "SELECT * FROM users 
+        WHERE TIMESTAMPDIFF(SECOND, last_active, NOW()) <= ?"; // online users
+$stmt = $conn->prepare($sql);
+$stmt->bind_param("i", $timeout_seconds);
+$stmt->execute();
+$result = $stmt->get_result();
 // ✅ Fetch updated online_status for display
 // ✅ Get the user's last_active timestamp
 $getStatus = $conn->prepare("SELECT last_active FROM users WHERE id = ?");
@@ -105,19 +115,6 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
     <p>Loading LeagueBook...</p>
   </div>
 </div>
-<?php
-session_start();
-include("connect.php");
-
-if (!isset($_SESSION['user_id'])) {
-    http_response_code(403);
-    exit("Unauthorized");
-}
-
-$update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
-$update->bind_param("i", $_SESSION['user_id']);
-$update->execute();
-?>
 
 
 <body>
@@ -128,8 +125,552 @@ $update->execute();
     <!-- 🔗 Fixed Top Bar with Homepage Shortcut -->
 <div class="top-bar">
  <a href="LeagueBook_Page.php" class="home-link">HOME</a>
-
 </div>
+
+<!-- 🎥 Videos Button -->
+<button id="reelsButton" style="
+    position: fixed;
+    top:5%;
+    left:50%;
+    transform: translate(-50%, -50%);
+    z-index:9999999;
+    background:#2196f3;
+    color:white;
+    border:none;
+    padding:12px 20px;
+    border-radius:8px;
+    font-size:16px;
+    font-weight:bold;
+    cursor:pointer;
+">🎥 Videos</button>
+
+<!-- Reels Container -->
+<div id="reelsContainer" style="
+    display:none;
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(0,0,0,0.95);
+    z-index:999999;
+    overflow:hidden;
+    padding:20px;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+">
+
+    <!-- Video + Content -->
+    <div id="videoWrapper" style="position:relative; max-width:70%; width:100%;">
+        <div id="reelContent" style="text-align:center;"></div>
+
+        <!-- Navigation Buttons -->
+        <div id="reelNav" style="
+            position:absolute;
+            right:-60px;
+            top:50%;
+            transform:translateY(-50%);
+            display:flex;
+            flex-direction:column;
+            gap:10px;
+        ">
+            <button onclick="prevReel()" style="padding:8px 12px;">⬆️</button>
+            <button onclick="nextReel()" style="padding:8px 12px;">⬇️</button>
+        </div>
+
+        <!-- Right-side Action Buttons -->
+        <div id="reelActions" style="
+            position:absolute;
+            right:-130px;
+            top:50%;
+            transform:translateY(-50%);
+            display:flex;
+            flex-direction:column;
+            gap:15px;
+            color:white;
+            text-align:center;
+        ">
+            <div>
+                <button onclick="likeVideo()" style="width:50px; height:50px; border-radius:50%; font-size:20px;">👍</button>
+                <div id="likeCount" style="margin-top:4px;">0</div>
+            </div>
+            <div>
+                <button onclick="toggleCommentPanel()" style="width:50px; height:50px; border-radius:50%; font-size:20px;">💬</button>
+                <div id="commentCount" style="margin-top:4px;">0</div>
+            </div>
+            <div>
+                <button onclick="replyVideo()" style="width:50px; height:50px; border-radius:50%; font-size:20px;">↩️</button>
+                <div id="replyCount" style="margin-top:4px;">0</div>
+            </div>
+            <div>
+                <button onclick="shareVideo()" style="width:50px; height:50px; border-radius:50%; font-size:20px;">🔗</button>
+                <div id="shareCount" style="margin-top:4px;">0</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close Button -->
+    <button onclick="closeReels()" style="
+        position:fixed;
+        top:20px;
+        right:20px;
+        z-index:1000001;
+        background:red;
+        color:white;
+        border:none;
+        padding:8px 12px;
+        border-radius:6px;
+        cursor:pointer;
+    ">❌ Close</button>
+</div>
+
+<!-- Comment Panel -->
+<div id="commentPanel" style="
+    display:none;
+    position:fixed;
+    top:40%;
+    right:220px;
+    width:320px;
+    max-height:80%;
+    background:rgba(0,0,0,0.9);
+    color:white;
+    border-radius:10px 0 0 10px;
+    padding:10px;
+    z-index:1000002;
+    flex-direction:column;
+">
+    <h3 style="text-align:center;">Comments</h3>
+    <div id="commentList" style="overflow-y:auto; max-height:60%; margin-top:10px;"></div>
+    <div style="margin-top:10px; display:flex; gap:5px;">
+        <input type="text" id="commentInput" placeholder="Add a comment..." style="flex:1; padding:6px; border-radius:5px; border:none;">
+        <button id="commentSubmit" style="padding:6px 10px; border-radius:5px; border:none; background:#2196f3; color:white;">Send</button>
+    </div>
+</div>
+
+<script>
+let videos = [];
+let currentIndex = 0;
+let commentPanelVisible = false;
+
+// =========================
+// Helper: Format time ago
+// =========================
+function timeAgo(dateString) {
+    const now = new Date();
+    const postDate = new Date(dateString);
+    const seconds = Math.floor((now - postDate) / 1000);
+
+    let interval = Math.floor(seconds / 31536000);
+    if (interval >= 1) return interval + " year" + (interval > 1 ? "s" : "") + " ago";
+
+    interval = Math.floor(seconds / 2592000);
+    if (interval >= 1) return interval + " month" + (interval > 1 ? "s" : "") + " ago";
+
+    interval = Math.floor(seconds / 86400);
+    if (interval >= 1) return interval + " day" + (interval > 1 ? "s" : "") + " ago";
+
+    interval = Math.floor(seconds / 3600);
+    if (interval >= 1) return interval + " hour" + (interval > 1 ? "s" : "") + " ago";
+
+    interval = Math.floor(seconds / 60);
+    if (interval >= 1) return interval + " minute" + (interval > 1 ? "s" : "") + " ago";
+
+    return "Just now";
+}
+
+// =========================
+// DOM Elements
+// =========================
+const container = document.getElementById('reelsContainer');
+const reelContent = document.getElementById('reelContent');
+const likeCount = document.getElementById('likeCount');
+const commentCount = document.getElementById('commentCount');
+const replyCount = document.getElementById('replyCount');
+const shareCount = document.getElementById('shareCount');
+const commentPanel = document.getElementById('commentPanel');
+const commentList = document.getElementById('commentList');
+const commentInput = document.getElementById('commentInput');
+const commentSubmit = document.getElementById('commentSubmit');
+
+// =========================
+// Fetch videos
+// =========================
+fetch("video_posts.php")
+    .then(res => res.json())
+    .then(data => {
+        videos = data;
+        if (videos.length > 0) {
+            container.style.display = 'flex';
+            loadReel(currentIndex);
+        }
+    })
+    .catch(() => alert("Failed to load videos"));
+
+// =========================
+// Show overlay on button click
+// =========================
+document.getElementById('reelsButton').addEventListener('click', () => {
+    if (!videos.length) return;
+    container.style.display = 'flex';
+    loadReel(currentIndex);
+});
+
+// =========================
+// Load a single video
+// =========================
+function loadReel(index) {
+    const videoData = videos[index];
+
+    reelContent.innerHTML = `
+        <video id="currentReelVideo" autoplay controls playsinline style="width:100%; border-radius:8px;">
+            <source src="${videoData.video}" type="video/mp4">
+        </video>
+        ${videoData.content ? `<div style="margin-top:8px; color:white;">${videoData.content}</div>` : ''}
+        ${videoData.created_at ? `<div style="margin-top:4px; font-size:14px; color:#ccc;">Posted: ${timeAgo(videoData.created_at)}</div>` : ''}
+    `;
+
+    likeCount.textContent = videoData.likes || 0;
+    commentCount.textContent = videoData.comments || 0;
+    replyCount.textContent = videoData.replies || 0;
+    shareCount.textContent = videoData.shares || 0;
+
+    const videoEl = document.getElementById('currentReelVideo');
+    videoEl.play().catch(() => console.log("Autoplay blocked"));
+
+    // Click outside video closes overlay
+    container.addEventListener('click', e => {
+        if (
+            e.target.closest('#currentReelVideo') ||
+            e.target.closest('#commentPanel') ||
+            e.target.closest('#reelActions') ||
+            e.target.closest('#reelNav')
+        ) return;
+
+        closeReels();
+    });
+
+    // Clicking video toggles play/pause
+    videoEl.addEventListener('click', e => {
+        if (videoEl.paused) videoEl.play();
+        else videoEl.pause();
+        e.stopPropagation();
+    });
+}
+
+// =========================
+// Close overlay
+// =========================
+function closeReels() {
+    container.style.display = 'none';
+    reelContent.innerHTML = '';
+    commentPanel.style.display = 'none';
+    commentPanelVisible = false;
+}
+
+// Navigation functions
+function nextReel() {
+    currentIndex = (currentIndex + 1) % videos.length;
+    loadReel(currentIndex, 'next');
+}
+
+function prevReel() {
+    currentIndex = (currentIndex - 1 + videos.length) % videos.length;
+    loadReel(currentIndex, 'prev');
+}
+
+// =========================
+// Like video
+// =========================
+function likeVideo() {
+    const postId = videos[currentIndex].id;
+    fetch('like_video.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            videos[currentIndex].likes = data.likes_count;
+            likeCount.textContent = data.likes_count;
+        } else alert(data.message);
+    })
+    .catch(() => alert("Failed to like the video"));
+}
+
+// =========================
+// Toggle Comment Panel
+// =========================
+function toggleCommentPanel() {
+    const postId = videos[currentIndex].id;
+    if (commentPanelVisible) {
+        commentPanel.classList.remove('show');
+        setTimeout(() => {
+            commentPanel.style.display = 'none';
+            commentList.innerHTML = '';
+            commentInput.value = '';
+            commentPanelVisible = false;
+        }, 300);
+    } else {
+        commentPanel.style.display = 'flex';
+        setTimeout(() => commentPanel.classList.add('show'), 10);
+        loadComments(postId);
+        commentPanelVisible = true;
+    }
+}
+
+// =========================
+// Load comments
+// =========================
+function loadComments(postId) {
+    fetch(`load_comments.php?post_id=${postId}`)
+        .then(res => res.json())
+        .then(data => {
+            commentList.innerHTML = '';
+            if (!data || data.length === 0) {
+                commentList.innerHTML = '<p style="text-align:center;">No comments yet.</p>';
+                return;
+            }
+            data.forEach(c => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '8px';
+                div.textContent = `${c.user_name}: ${c.content}`;
+                commentList.appendChild(div);
+            });
+            commentList.scrollTop = commentList.scrollHeight;
+        })
+        .catch(err => {
+            console.error("Fetch error:", err);
+            commentList.innerHTML = '<p style="text-align:center; color:red;">Failed to load comments.</p>';
+        });
+}
+
+// =========================
+// Submit comment
+// =========================
+commentSubmit.addEventListener('click', () => {
+    const text = commentInput.value.trim();
+    if (!text) return;
+    const postId = videos[currentIndex].id;
+    fetch('comment_video.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ post_id: postId, comment: text })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.success) {
+            commentInput.value = '';
+            loadComments(postId);
+            videos[currentIndex].comments = data.comments_count;
+            commentCount.textContent = data.comments_count;
+        } else alert(data.message);
+    })
+    .catch(err => {
+        console.error("Comment submit error:", err);
+        alert("Failed to send comment");
+    });
+});
+
+// =========================
+// Submit on Enter key
+// =========================
+commentInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        commentSubmit.click();
+    }
+});
+
+// =========================
+// Reply and Share
+// =========================
+function replyVideo() {
+    videos[currentIndex].replies = (videos[currentIndex].replies || 0) + 1;
+    replyCount.textContent = videos[currentIndex].replies;
+}
+
+function shareVideo() {
+    videos[currentIndex].shares = (videos[currentIndex].shares || 0) + 1;
+    shareCount.textContent = videos[currentIndex].shares;
+}
+// Show/hide nav and action buttons with slide effect
+function showButtons() {
+    document.getElementById('reelNav').classList.add('visible');
+    document.getElementById('reelNav').classList.remove('hidden');
+    document.getElementById('reelActions').classList.add('visible');
+    document.getElementById('reelActions').classList.remove('hidden');
+}
+
+function hideButtons() {
+    document.getElementById('reelNav').classList.add('hidden');
+    document.getElementById('reelNav').classList.remove('visible');
+    document.getElementById('reelActions').classList.add('hidden');
+    document.getElementById('reelActions').classList.remove('visible');
+}
+
+// Example: call hideButtons() when reel opens and showButtons() when it closes
+reelsButton.addEventListener('click', () => {
+    container.style.display = 'flex';
+    slideButton(true); // button slides up
+    hideButtons(); // nav/action slide out initially
+});
+
+function closeReels() {
+    container.style.display = 'none';
+    reelContent.innerHTML = '';
+    commentPanel.style.display = 'none';
+    commentPanelVisible = false;
+    slideButton(false); // button slides down
+    showButtons(); // nav/action slide in
+}
+// =========================
+// Video wrapper scroll
+// =========================
+const videoWrapper = document.getElementById('videoWrapper');
+let scrollTimeout;
+
+// Handle scroll on video wrapper only
+videoWrapper.addEventListener('wheel', (e) => {
+    e.preventDefault();  // Prevent main page scroll
+    handleVideoScroll(e.deltaY);
+}, { passive: false });  // passive:false needed for preventDefault
+
+function handleVideoScroll(deltaY) {
+    if (scrollTimeout) return;  // Throttle rapid scrolls
+    scrollTimeout = setTimeout(() => scrollTimeout = null, 400);  // 400ms between scrolls
+
+    if (deltaY > 0) {
+        nextReel();  // Scroll down → next video
+    } else {
+        prevReel();  // Scroll up → previous video
+    }
+}
+
+// =========================
+// Open and close reels overlay
+// =========================
+function openReels() {
+    container.style.display = 'flex';
+    document.body.style.overflow = 'hidden'; // ❌ Prevent main page scroll
+    loadReel(currentIndex);
+}
+
+function closeReels() {
+    container.style.display = 'none';
+    reelContent.innerHTML = '';
+    commentPanel.style.display = 'none';
+    commentPanelVisible = false;
+    document.body.style.overflow = ''; // ✅ Allow main page scroll again
+}
+const reelNav = document.getElementById('reelNav');
+const reelActions = document.getElementById('reelActions');
+
+document.addEventListener('mousemove', (e) => {
+    const windowWidth = window.innerWidth;
+    const rightEdgeThreshold = 150;   // mouse near right side
+    const centerThreshold = 400;      // mouse near center
+
+    if (e.clientX > windowWidth - rightEdgeThreshold) {
+        // Mouse near right → show buttons
+        reelNav.classList.add('visible');
+        reelNav.classList.remove('hidden');
+        reelActions.classList.add('visible');
+        reelActions.classList.remove('hidden');
+    } else if (Math.abs(e.clientX - windowWidth / 2) < centerThreshold) {
+        // Mouse near center → hide buttons
+        reelNav.classList.add('hidden');
+        reelNav.classList.remove('visible');
+        reelActions.classList.add('hidden');
+        reelActions.classList.remove('visible');
+    }
+});
+
+
+</script>
+
+
+<style>
+/* Comment panel animations */
+#commentPanel{
+    transform: translateY(100%);
+    opacity:0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+#commentPanel.show{
+    transform: translateY(0);
+    opacity:1;
+}
+#reelNav, #reelActions {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    transition: right 0.3s ease, opacity 0.3s ease;
+    opacity: 0;              /* hidden by default */
+    pointer-events: auto;     /* ensure buttons are clickable */
+}
+
+/* Default hidden positions */
+#reelNav { right: -60px; }
+#reelActions { right: -130px; }
+
+/* Visible positions */
+#reelNav.visible { right: 20px; opacity: 1; }
+#reelNav.hidden { right: -60px; opacity: 0; }
+
+#reelActions.visible { right: 20px; opacity: 1; }
+#reelActions.hidden { right: -130px; opacity: 0; }
+
+/* Mobile adjustments */
+@media (max-width:768px){
+    
+    }
+    #reelActions{
+        position:static;
+        flex-direction:row;
+        justify-content:center;
+        gap:10px;
+        margin-top:15px;
+        transform:none;
+    }
+    #videoWrapper{ max-width:90%; }
+    #commentPanel{
+        top:auto;
+        bottom:0;
+        right:0;
+        width:100%;
+        max-height:50%;
+        border-radius:12px 12px 0 0;
+        transform: translateY(100%);
+        opacity:0;
+    }
+    #commentPanel.show{ transform:translateY(0); opacity:1; }
+
+/* Slide animation for navigation and action buttons */
+#reelNav, #reelActions {
+    transition: transform 0.4s ease, opacity 0.4s ease;
+}
+
+#reelNav.hidden, #reelActions.hidden {
+    transform: translateX(100px);
+    opacity: 0;
+}
+
+#reelNav.visible, #reelActions.visible {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+</style>
+
+
+
+
+
 <div id="chatBox" style="display:none; border:1px solid gray; padding:10px;">
   <h4 id="chatHeader">Chat</h4>
   <div id="chatMessages" style="height:300px; overflow-y:scroll; border:1px solid #ccc;"></div>
@@ -157,11 +698,7 @@ $update->execute();
 <a href="inbox.php" class="button">
   📩 Inbox <?= $unreadCount > 0 ? "<span class='badge'>$unreadCount</span>" : "" ?>
 </a>
-
-
-
-
-    
+ 
 <div class="friend-request-container">
   <a href="view_friend_request.php" class="friend-request-link">
     📬 View Friend Requests

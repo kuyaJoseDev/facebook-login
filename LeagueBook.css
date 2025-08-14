@@ -166,22 +166,7 @@ body {
 .signup_form {
   transition: all 0.3s ease;
 }
-.friend-requests {
-    list-style: none;
-    padding: 0;
-    margin: 20px 0;
-}
 
-.friend-requests li {
-    background: #f0f0f0;
-    padding: 10px;
-    margin-bottom: 10px;
-    border-radius: 8px;
-}
-
-.friend-requests button {
-    margin-left: 10px;
-}
 .alert-message {
   color: red;
   font-weight: bold;
