@@ -2,35 +2,45 @@
 session_start();
 include("connect.php");
 
-// 1. Validate session
+// Ensure user is logged in
 if (!isset($_SESSION['user_id'])) {
-    die("Unauthorized access. Please log in.");
+    echo json_encode(["status" => "error", "message" => "Not logged in"]);
+    exit;
 }
 
-$user_id = $_SESSION['user_id'];
-$post_id = (int)($_POST['post_id'] ?? 0);
-$parent_id = isset($_POST['parent_id']) ? (int)$_POST['parent_id'] : null;
-$content = trim($_POST['content'] ?? '');
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['post_id'], $_POST['content'])) {
+    $post_id = intval($_POST['post_id']);
+    $parent_id = isset($_POST['parent_id']) ? intval($_POST['parent_id']) : null;
+    $content = trim($_POST['content']);
+    $user_id = $_SESSION['user_id'];
 
-// 2. Validate input
-if (!$post_id || $content === '') {
-    die("Post ID or content missing.");
-}
-
-// 3. Insert comment
-$stmt = $conn->prepare("INSERT INTO comments (post_id, user_id, parent_id, content, created_at) VALUES (?, ?, ?, ?, NOW())");
-$stmt->bind_param("iiis", $post_id, $user_id, $parent_id, $content);
-
-if ($stmt->execute()) {
-    // Redirect to the post view (with optional open_reply flag if it's a reply)
-    $redirect_url = "view_post.php?id=$post_id";
-    if (!empty($parent_id)) {
-        $redirect_url .= "&open_reply=$parent_id";
+    if ($content === '') {
+        echo json_encode(["status" => "error", "message" => "Empty comment"]);
+        exit;
     }
-    header("Location: $redirect_url");
-    exit();
-} else {
-    error_log("Failed to insert comment: " . $stmt->error);
-    echo "❌ Failed to add comment. Please try again later.";
+
+    // Insert comment into DB
+    $stmt = $conn->prepare("INSERT INTO comments (post_id, user_id, parent_id, content, created_at) VALUES (?, ?, ?, ?, NOW())");
+    $stmt->bind_param("iiis", $post_id, $user_id, $parent_id, $content);
+
+    if ($stmt->execute()) {
+        // Fetch username for immediate display
+        $sql = "SELECT COALESCE(username, name, full_name, 'Anonymous') AS user_name FROM users WHERE id = ?";
+        $u_stmt = $conn->prepare($sql);
+        $u_stmt->bind_param("i", $user_id);
+        $u_stmt->execute();
+        $u_result = $u_stmt->get_result();
+        $user = $u_result->fetch_assoc();
+
+        echo json_encode([
+            "status" => "success",
+            "id" => $stmt->insert_id,
+            "user_name" => $user['user_name'],
+            "content" => $content,
+            "created_at" => date('Y-m-d H:i:s')
+        ]);
+    } else {
+        echo json_encode(["status" => "error", "message" => "Insert failed"]);
+    }
 }
 ?>
