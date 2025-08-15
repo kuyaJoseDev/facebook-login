@@ -162,22 +162,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
       <input type="hidden" name="action" value="signup" />
       <div class="input_box">
         <input type="text" name="name" placeholder="Enter your name" required />
-        <i class="uil uil-user"></i>
       </div>
+       <i class="uil uil-user"></i>
       <div class="input_box">
-        <input type="email" name="email" placeholder="Enter your email address" required />
-        <i class="uil uil-envelope-alt email"></i>
+        <input type="email" name="email" placeholder="Enter your email address" required />   
       </div>
+      <i class="uil uil-envelope-alt email"></i>
       <div class="input_box">
         <input type="password" name="password" id="signup_password" placeholder="Create a password" required />
-        <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye pw_toggle" toggle="signup_password"></i>
       </div>
+         <i class="uil uil-lock password"></i>
+        <i class="uil uil-eye pw_toggle" toggle="signup_password"></i>
       <div class="input_box">
         <input type="password" name="confirm" id="signup_confirm" placeholder="Confirm your password" required />
-        <i class="uil uil-lock password"></i>
-        <i class="uil uil-eye pw_toggle" toggle="signup_confirm"></i>
       </div>
+      <i class="uil uil-lock password"></i>
+        <i class="uil uil-eye pw_toggle" toggle="signup_confirm"></i>
 
       <button class="button" type="submit">Sign Up</button>
       <div class="login_signup">
@@ -214,6 +214,19 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     
   });
 });
+  // Auto fade out success message after 3 seconds
+  window.addEventListener('DOMContentLoaded', () => {
+    const successMsg = document.querySelector('.success_message');
+    if (successMsg) {
+      setTimeout(() => {
+        successMsg.style.opacity = '0';
+        // Optional: remove from DOM after fade
+        setTimeout(() => successMsg.remove(), 1000);
+      }, 3000); // 3 seconds before fade
+    }
+  });
+
+
 
 </script>
 

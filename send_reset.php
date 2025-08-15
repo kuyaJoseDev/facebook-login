@@ -60,8 +60,9 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
 
     } else {
-        header("Location: forgot_password.php?error=notfound");
-        exit();
+       // After sending the reset email
+header("Location: forgot_password.php?success=sent");
+exit();
     }
 }
 ?>

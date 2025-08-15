@@ -2,6 +2,12 @@
 session_start();
 
 $message = '';
+$success_message = '';
+
+// Show success message if redirected from forgot_password.php
+if (isset($_GET['success']) && $_GET['success'] === 'sent') {
+    $success_message = '✅ The verification code has been sent to your email.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!isset($_POST['otp']) || empty($_POST['otp'])) {
@@ -16,8 +22,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ✅ OTP verified — redirect to password reset form
         $_SESSION['reset_email'] = $_SESSION['otp_email'];
 
-        unset($_SESSION['otp']);
-        unset($_SESSION['otp_expiry']);
+        unset($_SESSION['otp'], $_SESSION['otp_expiry']);
 
         header("Location: reset_password.php");
         exit();
@@ -27,12 +32,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8">
   <title>Verify OTP</title>
-  <link rel="stylesheet" href="LeagueBook.css" />
+  <link rel="stylesheet" href="LeagueBook.css">
+  <style>
+    .success_message {
+      color: #4CAF50;
+      font-weight: bold;
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+  </style>
 </head>
 <body>
-  <<header class="header">
+<header class="header">
   <nav class="nav">
     <ul class="facebook_login">
       <li class="League_Book"><h1>LeagueBook</h1></li>
@@ -43,24 +57,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </nav>
 </header>
 
-  <div class="form_container">
-    <form action="verify_otp.php" method="POST">
-      <h2 style="color: white;">Verify Your OTP</h2>
+<div class="form_container">
+  <form action="verify_otp.php" method="POST">
+    <h2 style="color: white;">Verify Your OTP</h2>
 
-      <?php if (!empty($message)): ?>
-        <div class="error_message"><?php echo $message; ?></div>
-      <?php endif; ?>
+    <!-- ✅ Success message -->
+    <?php if (!empty($success_message)): ?>
+      <div class="success_message"><?php echo $success_message; ?></div>
+    <?php endif; ?>
 
-      <div class="input_box">
-        <input type="text" name="otp" placeholder="Enter the OTP sent to your email" required />
-      </div>
+    <!-- ❌ Error message -->
+    <?php if (!empty($message)): ?>
+      <div class="error_message"><?php echo $message; ?></div>
+    <?php endif; ?>
 
-      <button class="button" type="submit">Verify</button>
+    <div class="input_box">
+      <input type="text" name="otp" placeholder="Enter the OTP sent to your email" required>
+    </div>
 
-      <div class="forgot_container" style="margin-top: 15px;">
-        <a id="forgot_password" href="forgot_password.php">⬅ Back to Forgot Password</a>
-      </div>
-    </form>
-  </div>
+    <button class="button" type="submit">Verify</button>
+
+    <div class="forgot_container" style="margin-top: 15px;">
+      <a id="forgot_password" href="forgot_password.php">⬅ Back to Forgot Password</a>
+    </div>
+  </form>
+</div>
 </body>
 </html>

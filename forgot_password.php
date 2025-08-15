@@ -20,23 +20,25 @@
     </span>
   </nav>
 </header>
-  <?php if (isset($_GET['error'])): ?>
-    <div class="error_message">
-      <?php
-        switch ($_GET['error']) {
-          case 'empty': echo '⚠️ Please enter your email address.'; break;
-          case 'notfound': echo '❌ No account found with that email.'; break;
-          default: echo '❌ Something went wrong.'; break;
-        }
-      ?>
-    </div>
-  <?php endif; ?>
+ 
+    <!-- ✅ Success / Error messages inside the form -->
+    <?php if (isset($_GET['error'])): ?>
+      <div class="error_message">
+        <?php
+          switch ($_GET['error']) {
+            case 'empty': echo '⚠️ Please enter your email address.'; break;
+            case 'notfound': echo '❌ No account found with that email.'; break;
+            default: echo '❌ Something went wrong.'; break;
+          }
+        ?>
+      </div>
+    <?php endif; ?>
 
-  <?php if (isset($_GET['success']) && $_GET['success'] === 'sent'): ?>
-    <div class="success_message">
-      ✅ A password reset link has been sent to your email.
-    </div>
-  <?php endif; ?>
+    <?php if (isset($_GET['success']) && $_GET['success'] === 'sent'): ?>
+      <div class="success_message">
+        ✅ The verification code has been sent to your email.
+      </div>
+    <?php endif; ?>
 
   <div class="form_container">
     <form action="send_reset.php" method="POST">
