@@ -2,6 +2,8 @@
 session_start();
 include("connect.php");
 
+$loggedInUserId = $_SESSION['user_id'] ?? null; // ensures variable is defined
+
 // Make sure this is after session_start() and include("connect.php")
 $unreadCount = 0; // Default value in case the query fails
 
@@ -145,52 +147,18 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
 ">🎥 Videos</button>
 
 <!-- Reels Container -->
-<div id="reelsContainer" style="
-    display:none;
-    position:fixed;
-    top:0;
-    left:0;
-    width:100%;
-    height:100%;
-    background:rgba(0,0,0,0.95);
-    z-index:999999;
-    overflow:hidden;
-    padding:20px;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-">
-
-    <!-- Video + Content -->
+<div id="reelsContainer" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:999999; padding:20px; display:flex; justify-content:center; align-items:center;">
     <div id="videoWrapper" style="position:relative; max-width:70%; width:100%;">
         <div id="reelContent" style="text-align:center;"></div>
 
         <!-- Navigation Buttons -->
-        <div id="reelNav" style="
-            position:absolute;
-            right:-60px;
-            top:50%;
-            transform:translateY(-50%);
-            display:flex;
-            flex-direction:column;
-            gap:10px;
-        ">
+        <div id="reelNav" style="position:absolute; right:-60px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:10px;">
             <button onclick="prevReel()" style="padding:8px 12px;">⬆️</button>
             <button onclick="nextReel()" style="padding:8px 12px;">⬇️</button>
         </div>
 
         <!-- Right-side Action Buttons -->
-        <div id="reelActions" style="
-            position:absolute;
-            right:-130px;
-            top:50%;
-            transform:translateY(-50%);
-            display:flex;
-            flex-direction:column;
-            gap:15px;
-            color:white;
-            text-align:center;
-        ">
+        <div id="reelActions" style="position:absolute; right:-130px; top:50%; transform:translateY(-50%); display:flex; flex-direction:column; gap:15px; color:white; text-align:center;">
             <div>
                 <button onclick="likeVideo()" style="width:50px; height:50px; border-radius:50%; font-size:20px;">👍</button>
                 <div id="likeCount" style="margin-top:4px;">0</div>
@@ -211,46 +179,18 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
     </div>
 
     <!-- Close Button -->
-    <button onclick="closeReels()" style="
-        position:fixed;
-        top:20px;
-        right:20px;
-        z-index:1000001;
-        background:red;
-        color:white;
-        border:none;
-        padding:8px 12px;
-        border-radius:6px;
-        cursor:pointer;
-    ">❌ Close</button>
+    <button onclick="closeReels()" style="position:fixed; top:20px; right:20px; z-index:1000001; background:red; color:white; border:none; padding:8px 12px; border-radius:6px; cursor:pointer;">❌ Close</button>
 </div>
 
-
 <!-- Comment Panel -->
-<div id="commentPanel" style="
-    display:none;
-    position:fixed;
-    top:40%;
-    right:220px;
-    width:320px;
-    max-height:80%;
-    background:rgba(0,0,0,0.9);
-    color:white;
-    border-radius:10px 0 0 10px;
-    padding:10px;
-    z-index:1000002;
-    flex-direction:column;
-">
+<div id="commentPanel" style="display:none; position:fixed; top:40%; right:220px; width:320px; max-height:80%; background:rgba(0,0,0,0.9); color:white; border-radius:10px 0 0 10px; padding:10px; z-index:1000002; flex-direction:column;">
     <h3 style="text-align:center; margin-bottom:10px;">Comments</h3>
-    
     <div id="commentList" style="overflow-y:auto; max-height:60%; padding-right:5px;"></div>
-
     <div style="margin-top:10px; display:flex; gap:5px;">
         <input type="text" id="commentInput" placeholder="Add a comment..." style="flex:1; padding:6px; border-radius:5px; border:none;">
         <button id="commentSubmit" style="padding:6px 10px; border-radius:5px; border:none; background:#2196f3; color:white;">Send</button>
     </div>
 </div>
-
 
 
 <script>
@@ -464,16 +404,17 @@ function toggleCommentPanel() {
 // =========================
 function loadComments(postId) {
     currentPostId = postId;
-    commentList.innerHTML = '';
+    commentList.innerHTML = '<p style="text-align:center;">Loading...</p>';
 
     fetch(`load_comments.php?post_id=${encodeURIComponent(postId)}`)
         .then(res => res.json())
         .then(data => {
+            commentList.innerHTML = '';
             if (!data.success || !data.comments.length) {
                 commentList.innerHTML = `<p style="text-align:center;">No comments yet.</p>`;
                 return;
             }
-            data.comments.forEach(c => renderComment(c));
+            data.comments.forEach(c => renderComment(c, commentList));
         })
         .catch(err => {
             console.error("Load comments error:", err);
@@ -481,52 +422,43 @@ function loadComments(postId) {
         });
 }
 
-function renderComment(c, parentDiv = null) {
+function renderComment(c, container) {
     const div = document.createElement('div');
     div.className = 'comment';
     div.setAttribute('data-id', c.id);
     div.style.marginBottom = '8px';
+    div.style.borderBottom = '1px solid rgba(255,255,255,0.2)';
+    div.style.paddingBottom = '4px';
 
     div.innerHTML = `
-        <strong>${c.user_name}</strong>: ${c.content}
-        <button onclick="showReplyInput(${c.id})">Reply</button>
+        <strong style="color:#1877f2;">${c.user_name}</strong> 
+        <span style="font-size:0.75em; color:#ccc; margin-left:5px;">${timeAgo(c.created_at)}</span>
+        <p>${c.content}</p>
+        <span class="reply-button" style="cursor:pointer; color:#ccc;" onclick="showReplyInput(${c.id})">Reply</span>
         <div class="replies" style="margin-left:15px;"></div>
     `;
 
-    if (parentDiv) parentDiv.querySelector('.replies').appendChild(div);
-    else commentList.appendChild(div);
+    container.appendChild(div);
 
     if (c.replies && c.replies.length) {
-        c.replies.forEach(r => renderComment(r, div));
+        c.replies.forEach(r => renderComment(r, div.querySelector('.replies')));
     }
-}
-
-function replyToComment(commentId, text) {
-    if (!currentPostId || !text) return;
-
-    postComment(currentPostId, text, commentId, newComment => {
-        const commentDiv = document.querySelector(`.comment[data-id="${commentId}"]`);
-        if (!commentDiv) return;
-        renderComment(newComment, commentDiv);
-    });
 }
 
 function showReplyInput(commentId) {
     const commentDiv = document.querySelector(`.comment[data-id="${commentId}"]`);
     if (!commentDiv) return;
 
-    let existingInput = commentDiv.querySelector('.replyInput');
-    if (existingInput) {
-        existingInput.querySelector('input').focus();
-        return;
-    }
+    if (commentDiv.querySelector('.replyInput')) return;
 
     const replyDiv = document.createElement('div');
     replyDiv.className = 'replyInput';
     replyDiv.style.marginTop = '5px';
+    replyDiv.style.display = 'flex';
+    replyDiv.style.gap = '5px';
     replyDiv.innerHTML = `
-        <input type="text" placeholder="Reply..." style="width:70%; padding:4px; border-radius:3px; border:1px solid #ccc;">
-        <button style="padding:4px 6px; border:none; background:#4caf50; color:white;">Send</button>
+        <input type="text" placeholder="Write a reply..." style="flex:1; padding:4px 6px; border-radius:15px; border:1px solid #ccc;">
+        <button style="padding:4px 8px; border-radius:15px; background:#1877f2; color:white; border:none;">Send</button>
     `;
     commentDiv.appendChild(replyDiv);
 
@@ -534,16 +466,21 @@ function showReplyInput(commentId) {
     const btn = replyDiv.querySelector('button');
     input.focus();
 
-    input.addEventListener('keypress', e => {
-        if (e.key === 'Enter') btn.click();
-    });
+    input.addEventListener('keypress', e => { if (e.key === 'Enter') btn.click(); });
 
     btn.addEventListener('click', () => {
         const text = input.value.trim();
         if (!text) return;
-
         replyToComment(commentId, text);
         replyDiv.remove();
+    });
+}
+
+function replyToComment(commentId, text) {
+    postComment(currentPostId, text, commentId, newComment => {
+        const repliesDiv = document.querySelector(`.comment[data-id="${commentId}"] .replies`);
+        renderComment(newComment, repliesDiv);
+        repliesDiv.scrollTop = repliesDiv.scrollHeight; // auto-scroll
     });
 }
 
@@ -551,15 +488,15 @@ function postComment(postId, content, parentId = 0, callback = null) {
     fetch('post_comment.php', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ post_id: postId, comment: content, parent_id: parentId })
+        body: JSON.stringify({ post_id: postId, content: content, parent_id: parentId })
     })
     .then(res => res.json())
     .then(data => {
         if (data.success) {
             if (callback) callback(data.new_comment);
             else loadComments(postId);
-
             if (parentId === 0) commentInput.value = '';
+            commentList.scrollTop = commentList.scrollHeight; // scroll to bottom
         } else alert(data.message || "Failed to post comment");
     })
     .catch(err => {
@@ -568,10 +505,22 @@ function postComment(postId, content, parentId = 0, callback = null) {
     });
 }
 
+function timeAgo(datetime) {
+    const now = new Date();
+    const past = new Date(datetime);
+    const diff = Math.floor((now - past)/1000);
+    if (diff < 60) return `${diff} sec ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)} hrs ago`;
+    return `${Math.floor(diff/86400)} days ago`;
+}
+
 commentSubmit.addEventListener('click', () => {
     const text = commentInput.value.trim();
     if (!text || !currentPostId) return;
-    postComment(currentPostId, text);
+    postComment(currentPostId, text, 0, newComment => {
+        renderComment(newComment, commentList);
+    });
 });
 
 
@@ -663,39 +612,102 @@ videoWrapper.addEventListener('touchend', (e) => {
     opacity: 0;              /* hidden by default */
     pointer-events: auto;     /* ensure buttons are clickable */
 }
+/* Single Comment */
 .comment {
-    padding: 6px 4px;
-    border-bottom: 1px solid rgba(255,255,255,0.1);
-    position: relative;
+    background: #000000ff; /* FB white */
+    padding: 8px 10px;
+    border-radius: 12px;
+    margin-bottom: 8px;
+    transition: background 0.2s;
+    color: #ffffffff; /* comment text color */
 }
 
+/* Username */
 .comment strong {
-    color: #0195f8ff; /* username color */
+    color: #050505; /* dark for visibility */
+    font-weight: 600;
 }
 
-.comment button {
-    background: none;
-    border: none;
-    color: #4caf50;
-    font-size: 0.9em;
-    margin-left: 10px;
+/* Time Ago */
+.comment span.timeAgo {
+    font-size: 0.75em;
+    color: #65676b; /* FB gray */
+    margin-left: 5px;
+}
+
+/* Comment Content */
+.comment p {
+    margin: 4px 0 0 0;
+    line-height: 1.3;
+    color: #ffffffff;
+}
+
+/* Reply Button */
+.comment .reply-button {
+    font-size: 0.85em;
+    color: #65676b; /* FB gray */
     cursor: pointer;
+    margin-top: 4px;
+    display: inline-block;
 }
 
+.comment .reply-button:hover {
+    color: #1877f2; /* FB blue */
+}
+
+/* Replies */
 .comment .replies {
-    margin-left: 15px; /* indent replies */
-    margin-top: 4px;
-    border-left: 1px solid rgba(255, 255, 255, 1);
-    padding-left: 8px;
+    margin-left: 15px;
+}
+
+/* Reply Input */
+.replyInput {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
 }
 
 .replyInput input {
-    background: rgba(255,255,255,0.1);
-    color: white;
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 20px;
+    border: 1px solid #ccd0d5;
+    outline: none;
+    background: #f0f2f5; /* light gray */
+    color: #050505; /* visible text */
 }
 
+.replyInput input:focus {
+    border-color: #1877f2;
+    background: #fff;
+    color: #050505;
+}
+
+/* Reply Send Button */
 .replyInput button {
+    padding: 6px 12px;
+    border-radius: 20px;
+    background: #1877f2;
+    color: #fff;
+    border: none;
     cursor: pointer;
+    font-weight: 600;
+}
+
+.replyInput button:hover {
+    background: #165ec0;
+}
+.comment span.timeAgo {
+    color: #fdfeffff; /* almost white */
+}
+.comment .reply-button {
+    color: #ffffffff; /* white */
+}
+.replyInput input {
+    background: #070707ff; /* very dark */
+}
+.replyInput input:focus {
+    background: #000000ff;
 }
 
 
@@ -829,8 +841,11 @@ videoWrapper.addEventListener('touchend', (e) => {
 }
 
 </style>
-
-
+<?php if (!empty($loggedInUserId)): ?>
+<a href="view_profile.php?id=<?= $loggedInUserId ?>" id="profileIcon">
+    <div class="profile-icon" style="background-image: url('img/user.jpg');"></div>
+</a>
+<?php endif; ?>
 
 
 

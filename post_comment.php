@@ -1,59 +1,48 @@
 <?php
 session_start();
+include("connect.php");
 header('Content-Type: application/json');
-include "connect.php";
 
-// Ensure user is logged in
 if (!isset($_SESSION['user_id'])) {
-    echo json_encode(['success' => false, 'message' => 'Not logged in']);
+    echo json_encode(["success" => false, "message" => "Not logged in"]);
     exit;
 }
 
+$data = json_decode(file_get_contents('php://input'), true);
+$post_id = intval($data['post_id'] ?? 0);
+$parent_id = intval($data['parent_id'] ?? 0);
+$content = trim($data['comment'] ?? '');
 $user_id = $_SESSION['user_id'];
 
-// Get POST data
-$data = json_decode(file_get_contents('php://input'), true);
-$post_id   = intval($data['post_id'] ?? 0);
-$comment   = trim($data['comment'] ?? '');
-$parent_id = intval($data['parent_id'] ?? 0); // 0 = top-level comment
-
-if (!$post_id || !$comment) {
-    echo json_encode(['success' => false, 'message' => 'Missing post_id or comment']);
+if (!$post_id || $content === '') {
+    echo json_encode(["success" => false, "message" => "Missing post ID or empty comment"]);
     exit;
 }
 
 // Insert comment
-$stmt = $conn->prepare("
-    INSERT INTO comments (post_id, user_id, content, parent_id, created_at)
-    VALUES (?, ?, ?, ?, NOW())
-");
-
-// Correct bind types: i = int, s = string
-$stmt->bind_param("iisi", $post_id, $user_id, $comment, $parent_id);
+$stmt = $conn->prepare("INSERT INTO comments (post_id, user_id, parent_id, content, created_at) VALUES (?, ?, ?, ?, NOW())");
+$stmt->bind_param("iiis", $post_id, $user_id, $parent_id, $content);
 
 if ($stmt->execute()) {
-    $comment_id = $conn->insert_id;
-
-    // Fetch the inserted comment with username
-    $res = $conn->prepare("
-        SELECT c.id, c.content, c.parent_id, u.name AS user_name
-        FROM comments c
-        JOIN users u ON c.user_id = u.id
-        WHERE c.id = ?
-    ");
-    $res->bind_param("i", $comment_id);
-    $res->execute();
-    $newComment = $res->get_result()->fetch_assoc();
-
-    $newComment['replies'] = []; // initialize replies array
+    // Return inserted comment with username
+    $stmt2 = $conn->prepare("SELECT name AS user_name FROM users WHERE id = ?");
+    $stmt2->bind_param("i", $user_id);
+    $stmt2->execute();
+    $res = $stmt2->get_result();
+    $user = $res->fetch_assoc();
 
     echo json_encode([
-        'success' => true,
-        'new_comment' => $newComment
+        "success" => true,
+        "new_comment" => [
+            "id" => $stmt->insert_id,
+            "post_id" => $post_id,
+            "user_id" => $user_id,
+            "parent_id" => $parent_id,
+            "content" => $content,
+            "user_name" => $user['user_name'],
+            "replies" => []
+        ]
     ]);
 } else {
-    echo json_encode(['success' => false, 'message' => 'Failed to insert comment']);
+    echo json_encode(["success" => false, "message" => "Insert failed"]);
 }
-
-exit;
-?>

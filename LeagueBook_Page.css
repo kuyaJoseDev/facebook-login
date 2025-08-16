@@ -330,7 +330,7 @@ button:active {
 /* 📱 Tablet & Mobile */
 @media (max-width: 1024px) {
   .top-bar {
-    left: 0;
+    left: 25%;
     width: 6.5%;
     height: 70px;
     padding-left: 15px;
@@ -660,50 +660,75 @@ button:active {
     0% { transform: scale(0.8); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }
 }
-#reelsContainer {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+/* Top-left avatar icon for desktop */
+#profileIcon {
     position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    background: rgba(0,0,0,0.95);
-    z-index: 999999; /* less than button when hidden */
-    overflow-y: auto;
-    padding: 20px;
-}
-.reel-actions button {
-    background: rgba(255,255,255,0.1);
-    color: white;
-    border: none;
-    padding: 8px;
-    border-radius: 50%;
+    top: 10px;
+    left: 35%; /* desktop left edge */
+    z-index: 1000;
     cursor: pointer;
-    width: 45px;
-    height: 45px;
-    font-size: 18px;
+    text-decoration: none;
 }
-.reel-actions button:hover {
-    background: rgba(255,255,255,0.25);
+
+.profile-icon {
+    width: 50px; /* desktop size */
+    height: 50px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid white;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    transition: transform 0.2s;
 }
-/* Reels slide animation */
-.reel-slide {
-    transition: transform 0.4s ease, opacity 0.4s ease;
+
+.profile-icon:hover {
+    transform: scale(1.1);
 }
-.reel-enter {
-    opacity: 0;
-    transform: translateX(100%);
+
+/* Desktop (unchanged) */
+#profileIcon {
+    position: fixed;
+    top: 10px;
+    left: 35%; /* desktop position */
+    z-index: 1000;
+    cursor: pointer;
+    text-decoration: none;
 }
-.reel-enter-active {
-    opacity: 1;
-    transform: translateX(0);
+
+.profile-icon {
+    width: 50px; /* desktop size */
+    height: 50px;
+    border-radius: 50%;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid white;
+    box-shadow: 0 0 5px rgba(0,0,0,0.5);
+    transition: transform 0.2s;
 }
-.reel-exit {
-    opacity: 1;
-    transform: translateX(0);
+
+.profile-icon:hover {
+    transform: scale(1.1);
 }
-.reel-exit-active {
-    opacity: 0;
-    transform: translateX(-100%);
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .profile-icon {
+        width: 40px;
+        height: 40px;
+    }
+    #profileIcon {
+        top: 12px;   /* slightly lower for spacing */
+        left: 10%;   /* 10% from left */
+    }
+}
+
+@media (max-width: 480px) {
+    .profile-icon {
+        width: 35px;
+        height: 35px;
+    }
+    #profileIcon {
+        top: 10px;   /* adjusted spacing */
+        left: 10%;   /* 10% from left */
+    }
 }
