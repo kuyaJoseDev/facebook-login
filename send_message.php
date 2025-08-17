@@ -2,88 +2,110 @@
 session_start();
 include("connect.php");
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: LeagueBook.php");
-    exit();
-}
+header('Content-Type: application/json');
 
-$senderId = $_SESSION['user_id'];
-$receiverId = $_POST['receiver_id'] ?? null;
-$message = trim($_POST['message'] ?? '');
+$response = ['success' => false, 'message' => null];
 
-if (!filter_var($receiverId, FILTER_VALIDATE_INT) || empty($message)) {
-    redirectBackWith('error=invalid_message');
-}
-
-// 🖼️ Handle optional file upload
-$mediaPath = null;
-$mediaType = null;
-
-if (isset($_FILES['media']) && $_FILES['media']['error'] === UPLOAD_ERR_OK) {
-    $uploadDir = 'uploads/messages/';
-    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
-
-    $fileTmp = $_FILES['media']['tmp_name'];
-    $fileName = basename($_FILES['media']['name']);
-    $targetPath = $uploadDir . time() . "_" . $fileName;
-
-    $ext = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
-
-    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])) {
-        $mediaType = 'image';
-    } elseif (in_array($ext, ['mp4', 'webm', 'ogg'])) {
-        $mediaType = 'video';
-    }
-
-    if ($mediaType && move_uploaded_file($fileTmp, $targetPath)) {
-        $mediaPath = $targetPath;
-    }
-}
-
-// 💬 Insert message with optional media
-$stmt = $conn->prepare("INSERT INTO private_messages (sender_id, receiver_id, message, media_path, media_type) VALUES (?, ?, ?, ?, ?)");
-$stmt->bind_param("iisss", $senderId, $receiverId, $message, $mediaPath, $mediaType);
-
-if ($stmt->execute()) {
-    redirectBackWith('success=message_sent');
-} else {
-    redirectBackWith('error=message_failed');
-}
-
-function redirectBackWith($query) {
-    $referer = $_SERVER['HTTP_REFERER'] ?? 'LeagueBook_Page.php';
-    $sep = (strpos($referer, '?') !== false) ? '&' : '?';
-    header("Location: {$referer}{$sep}{$query}");
-    exit();
-}
-
-
-$response = ['success' => false];
-
-if (!isset($_SESSION['user_id']) || !isset($_POST['receiver_id'])) {
+// --- Validate session & input ---
+if (!isset($_SESSION['user_id'], $_POST['receiver_id'])) {
     echo json_encode($response);
     exit;
 }
 
-$sender_id = $_SESSION['user_id'];
-$receiver_id = $_POST['receiver_id'];
+$sender_id   = $_SESSION['user_id'];
+$receiver_id = intval($_POST['receiver_id']);
+$message     = trim($_POST['message'] ?? '');
 
-if (isset($_FILES['media']) && $_FILES['media']['error'] == 0) {
-    $file = $_FILES['media'];
-    $ext = pathinfo($file['name'], PATHINFO_EXTENSION);
-    $filename = "uploads/" . uniqid() . "." . $ext;
-    
-    if (move_uploaded_file($file['tmp_name'], $filename)) {
-        $media_type = (strpos($file['type'], 'image') !== false) ? 'image' : 'video';
-        $stmt = $conn->prepare("INSERT INTO messages (sender_id, receiver_id, media_url, media_type, created_at) VALUES (?, ?, ?, ?, NOW())");
-        $stmt->bind_param("iiss", $sender_id, $receiver_id, $filename, $media_type);
-        $stmt->execute();
+$media_path  = null;
+$media_type  = null;
 
+// --- Prevent empty messages with no media ---
+if ($message === '' && empty($_FILES['media']['name'])) {
+    echo json_encode($response);
+    exit;
+}
+
+// --- Handle media upload ---
+if (!empty($_FILES['media']['name']) && $_FILES['media']['error'] === UPLOAD_ERR_OK) {
+    $uploadDir = 'uploads/messages/';
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    $fileTmp = $_FILES['media']['tmp_name'];
+    $fileName = basename($_FILES['media']['name']);
+    $safeFileName = preg_replace("/[^a-zA-Z0-9_\.-]/", "_", $fileName);
+    $media_path = $uploadDir . time() . "_" . $safeFileName;
+
+    $ext = strtolower(pathinfo($media_path, PATHINFO_EXTENSION));
+    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])) {
+        $media_type = 'image';
+    } elseif (in_array($ext, ['mp4', 'webm', 'ogg'])) {
+        $media_type = 'video';
+    } else {
+        $media_path = $media_type = null;
+    }
+
+    if ($media_path && !move_uploaded_file($fileTmp, $media_path)) {
+        $media_path = $media_type = null;
+    }
+}
+
+// --- Insert message into database ---
+$stmt = $conn->prepare("
+    INSERT INTO private_messages (sender_id, receiver_id, message, media_path, media_type) 
+    VALUES (?, ?, ?, ?, ?)
+");
+$stmt->bind_param("iisss", $sender_id, $receiver_id, $message, $media_path, $media_type);
+
+if ($stmt->execute()) {
+    $msg_id = $conn->insert_id;
+
+    // Fetch full row with sender name
+    $msgRowStmt = $conn->prepare("
+        SELECT pm.*, u.name AS sender_name
+        FROM private_messages pm
+        JOIN users u ON pm.sender_id = u.id
+        WHERE pm.id = ?
+    ");
+    $msgRowStmt->bind_param("i", $msg_id);
+    $msgRowStmt->execute();
+    $msgRow = $msgRowStmt->get_result()->fetch_assoc();
+
+    if ($msgRow) {
         $response['success'] = true;
-        $response['file_url'] = $filename;
-        $response['media_type'] = $media_type;
+        $response['message'] = [
+            'id'          => (int)$msgRow['id'],
+            'sender_id'   => (int)$msgRow['sender_id'],
+            'receiver_id' => (int)$msgRow['receiver_id'],
+            'sender_name' => $msgRow['sender_name'],
+            'message'     => $msgRow['message'],
+            'created_at'  => $msgRow['created_at'],
+            'media_path'  => $msgRow['media_path'],
+            'media_type'  => $msgRow['media_type']
+        ];
+
+        // --- Push to Node.js WebSocket server ---
+        $data = [
+            'type'        => 'chat',
+            'id'          => $msgRow['id'],
+            'sender_id'   => $msgRow['sender_id'],
+            'receiver_id' => $msgRow['receiver_id'],
+            'sender_name' => $msgRow['sender_name'],
+            'message'     => $msgRow['message'],
+            'created_at'  => $msgRow['created_at'],
+            'media_path'  => $msgRow['media_path'],
+            'media_type'  => $msgRow['media_type']
+        ];
+
+        $payload = json_encode($data) . "\n"; // important for Node.js stream parsing
+
+        $fp = @fsockopen("127.0.0.1", 3001, $errno, $errstr, 1);
+        if ($fp) {
+            fwrite($fp, $payload);
+            fclose($fp);
+        }
     }
 }
 
 echo json_encode($response);
-?>

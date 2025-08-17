@@ -120,6 +120,7 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
 
 
 <body>
+  
  
 
   <!-- ✅ Stylish Logout Bar -->
@@ -128,6 +129,510 @@ if ($user && (time() - strtotime($user['last_active']) <= 120)) {
 <div class="top-bar">
  <a href="LeagueBook_Page.php" class="home-link">HOME</a>
 </div>
+<!-- Chat Toggle Button -->
+<?php
+// Get total unread messages
+$unreadCount = $unreadCount ?? 0; // fallback if not set
+?>
+<!-- Floating chat toggle button -->
+<button id="openChatBtn" class="chat-toggle-btn">💬</button>
+
+
+<!-- Chat Container with Layers -->
+<!-- Friend Chat Layer -->
+<div class="chat-container">
+  <div id="chatLayers" class="chat-layers"></div>
+</div>
+
+<!-- Chat Templates: Mini Windows will be generated dynamically -->
+
+
+<!-- Chat Widget -->
+<div id="chatWidget" class="chat-widget">
+  <div class="chat-header">
+     <img id="myAvatar" src="default-avatar.png" class="avatar">
+        <span id="myName"></span>
+    <span id="chatUserName">Chat</span>
+    <button id="closeChat">✕</button>
+  </div>
+  <div id="chatMessages" class="chat-messages"></div>
+  <div id="typingIndicator" class="typing-indicator" style="display:none;">Typing...</div>
+  <form id="chatFormWidget" class="chat-form">
+    <textarea id="chatInput" rows="2" placeholder="Type a message..."></textarea>
+    <button type="submit">Send</button>
+  </form>
+</div>
+
+<style>
+  .chat-header {
+    display: flex;
+    align-items: center;
+    padding: 8px;
+    background-color: #f0f0f0;
+    border-bottom: 1px solid #ccc;
+}
+
+.chat-header .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-right: 10px;
+}
+
+.chat-header span {
+    font-weight: bold;
+    font-size: 16px;
+}
+
+/* ==================== Toggle Button ==================== */
+.chat-toggle-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: #1877f2;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  border: none;
+  z-index: 1001;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+}
+
+/* ==================== Chat Widget ==================== */
+.chat-widget {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  width: 300px;
+  max-height: 400px;
+  background: #fff;
+  border-radius: 10px;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+  font-family: 'Segoe UI', sans-serif;
+  z-index: 1000;
+}
+
+/* ==================== Chat Header ==================== */
+.chat-header {
+  background: #1877f2;
+  color: #000000ff;
+  padding: 10px 12px;
+  font-weight: bold;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+/* ==================== Messages ==================== */
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  background: #f0f2f5;
+  font-size: 14px;
+}
+
+.typing-indicator {
+  padding: 5px 10px;
+  font-size: 12px;
+  color: #555;
+  font-style: italic;
+}
+
+/* ==================== Form ==================== */
+.chat-form {
+  display: flex;
+  border-top: 1px solid #ddd;
+  background: #fff;
+}
+
+.chat-form textarea {
+  flex: 1;
+  padding: 8px;
+  font-size: 14px;
+  border: none;
+  resize: none;
+}
+
+.chat-form button {
+  background: #1877f2;
+  border: none;
+  color: #fff;
+  padding: 0 15px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.3s;
+}
+
+.chat-form button:hover {
+  background: #0f6bcc;
+}
+
+/* ==================== Message Bubbles ==================== */
+.message {
+  display: flex;
+  margin-bottom: 8px;
+  align-items: flex-end;
+}
+
+.my-message {
+  justify-content: flex-end;
+}
+
+.my-message .bubble {
+  background: #00c3ff;
+  color: #000;
+  border-radius: 18px 18px 0 18px;
+}
+
+.their-message {
+  justify-content: flex-start;
+}
+
+.their-message .bubble {
+  background: #e4e6eb;
+  color: #000;
+  border-radius: 18px 18px 18px 0;
+}
+
+.bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  font-size: 14px;
+  word-wrap: break-word;
+}
+
+.bubble small {
+  display: block;
+  font-size: 10px;
+  color: #555;
+  margin-top: 2px;
+}
+
+/* ==================== Chat Layers / Avatars ==================== */
+.chat-container {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  flex-direction: row-reverse;
+  gap: 10px;
+  z-index: 1000;
+  
+}
+
+/* Container for all chat layers */
+.chat-layers {
+  position: fixed;
+  top: 200px;      /* distance from top */
+  left: 20px;      /* distance from left edge */
+  display: flex;
+  flex-direction: column-reverse; /* new chats appear on top */
+  gap: 10px;
+  z-index: 1000;   /* make sure it's above content */
+}
+
+
+
+/* Avatar smaller */
+.chat-layer .avatar {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+}
+
+/* Username on left */
+.chat-layer .name {
+  order: -1;  /* moves name before avatar */
+  font-size: 14px;
+}
+
+/* Badge on far right */
+.chat-layer .badge {
+  background: red;
+  color: #fff;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* Hover effect */
+.chat-layer:hover {
+  transform: translateX(5px);
+}
+
+
+</style>
+
+<script>
+
+// ================= Variables =================
+const chatLayers = document.getElementById("chatLayers");
+const chatWidget = document.getElementById("chatWidget");
+const openChatBtn = document.getElementById("openChatBtn");
+const closeChatBtn = document.getElementById("closeChat");
+const chatForm = document.getElementById("chatFormWidget");
+const chatInput = document.getElementById("chatInput");
+const chatMessages = document.getElementById("chatMessages");
+const chatUserName = document.getElementById("chatUserName");
+const typingIndicator = document.getElementById("typingIndicator");
+
+let currentUserId = <?= $_SESSION['user_id'] ?? 0 ?>;
+let activeChatId = null;
+let openChats = {}; // { userId: { name, messages: [] } }
+let myProfile = {};
+
+// ================= Load my profile =================
+// Fetch my profile and update chat header
+fetch('get_my_profile.php')
+    .then(res => res.json())
+    .then(data => {
+        if (data && data.success) {
+            myProfile = data;
+
+            const avatarEl = document.getElementById('myAvatar');
+            const nameEl   = document.getElementById('myName');
+
+            if (avatarEl) avatarEl.src = myProfile.avatar || 'default-avatar.png';
+            if (nameEl) nameEl.innerText = myProfile.name || 'Me';
+
+            // Now you can safely render messages
+            if (activeChatId && openChats[activeChatId]) renderMessages();
+        } else {
+            console.error("Failed to load profile:", data.message);
+        }
+    })
+    .catch(err => console.error("Error fetching profile:", err));
+
+
+// ================= WebSocket =================
+const socket = new WebSocket("ws://localhost:8080");
+
+socket.addEventListener("open", () => {
+    socket.send(JSON.stringify({ type: "init", user_id: currentUserId }));
+});
+
+socket.addEventListener("message", event => {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "chat") {
+        const otherUser = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+
+        if (!openChats[otherUser]) openChats[otherUser] = { messages: [], name: msg.sender_name || "User" };
+        openChats[otherUser].messages.push(msg);
+
+        if (activeChatId === otherUser) {
+            renderMessages();
+            removeBadge(otherUser);
+            markMessagesRead(otherUser);
+        } else if (msg.sender_id !== currentUserId) {
+            incrementBadge(otherUser);
+        }
+    }
+
+    if (msg.type === "typing" && activeChatId === msg.sender_id) {
+        typingIndicator.style.display = "block";
+        typingIndicator.innerText = `${msg.sender_name} is typing...`;
+        clearTimeout(window.typingTimeout);
+        window.typingTimeout = setTimeout(() => typingIndicator.style.display = "none", 2000);
+    }
+});
+
+// ================= Chat Widget Toggle =================
+openChatBtn.addEventListener("click", () => chatWidget.style.display = "flex");
+closeChatBtn.addEventListener("click", () => chatWidget.style.display = "none");
+
+// ================= Open Chat =================
+function openChatWithUser(userId, userName) {
+    activeChatId = userId;
+    chatUserName.innerText = userName;
+    chatWidget.style.display = "flex";
+    removeBadge(userId);
+
+    // Initialize chat if it doesn't exist
+    if (!openChats[userId]) openChats[userId] = { messages: [] };
+
+    // Load messages only if not already loaded
+    if (openChats[userId].messages.length === 0) {
+        fetch(`private_load_message.php?user_id=${userId}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Store messages
+                    openChats[userId].messages = data.messages;
+
+                    // Render messages
+                    renderMessages();
+
+                    // Mark messages as read if any exist
+                    if (data.messages.length > 0) markMessagesRead(userId);
+                } else {
+                    console.error("Failed to load messages:", data.error || "Unknown error");
+                }
+            })
+            .catch(err => console.error("Error fetching messages:", err));
+    } else {
+        // If messages already loaded, just render them
+        renderMessages();
+    }
+}
+
+// ================= Render Messages =================
+function renderMessages() {
+    if (!activeChatId || !openChats[activeChatId]) return;
+    chatMessages.innerHTML = "";
+
+    openChats[activeChatId].messages.forEach(msg => renderMessage(msg));
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function renderMessage(msg, save = false) {
+    if (!msg) return;
+
+    const div = document.createElement("div");
+    div.className = "message " + (msg.sender_id === currentUserId ? "my-message" : "their-message");
+
+    // Use sender_avatar for all messages; fallback to myProfile.avatar if it's your message
+    const avatarSrc = msg.sender_avatar || (msg.sender_id === currentUserId ? myProfile.avatar : 'default-avatar.png');
+
+    div.innerHTML = `
+        <img class="avatar" src="${avatarSrc}" alt="avatar">
+        <div class="bubble">
+            <strong>${msg.sender_name}</strong><br>
+            ${msg.message.replace(/\n/g, "<br>")}
+            <br><small>${msg.created_at}</small>
+            ${msg.media_path && msg.media_type === "image" ? `<br><img src="${msg.media_path}" style="max-width:100%;">` : ""}
+            ${msg.media_path && msg.media_type === "video" ? `<br><video controls style="max-width:100%;"><source src="${msg.media_path}" type="video/mp4"></video>` : ""}
+        </div>
+    `;
+
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+    if (save && activeChatId) {
+        openChats[activeChatId].messages.push(msg);
+    }
+}
+
+
+// ================= Send Message =================
+chatForm.addEventListener("submit", e => {
+    e.preventDefault();
+    const text = chatInput.value.trim();
+    const fileInput = chatForm.querySelector("input[type='file']");
+
+    if (!text && (!fileInput || !fileInput.files.length)) return;
+
+    const formData = new FormData();
+    formData.append("receiver_id", activeChatId);
+    formData.append("message", text);
+
+    if (fileInput && fileInput.files.length > 0) formData.append("media", fileInput.files[0]);
+
+    fetch("send_message.php", { method: "POST", body: formData })
+        .then(res => res.json())
+        .then(resp => {
+            if (resp.success && resp.message) {
+                renderMessage(resp.message);
+                chatInput.value = "";
+                if (fileInput) fileInput.value = "";
+                socket.send(JSON.stringify({ type: "chat", ...resp.message }));
+            }
+        });
+});
+
+// Enter key shortcut
+chatInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        chatForm.dispatchEvent(new Event("submit"));
+    }
+});
+
+// ================= Typing Indicator =================
+chatInput.addEventListener("input", () => {
+    if (!activeChatId) return;
+    socket.send(JSON.stringify({
+        type: "typing",
+        sender_id: currentUserId,
+        sender_name: "You",
+        receiver_id: activeChatId
+    }));
+});
+
+// ================= Friends List =================
+fetch("get_friends_chats.php")
+    .then(res => res.json())
+    .then(friends => {
+        friends.forEach(friend => {
+            const div = document.createElement("div");
+            div.className = "chat-layer";
+            div.dataset.userId = friend.user_id;
+            div.dataset.userName = friend.user_name;
+            div.innerHTML = `
+                <img src="${friend.avatar}" class="avatar">
+                <span class="name">${friend.user_name}</span>
+                ${friend.unread > 0 ? `<span class="badge">${friend.unread}</span>` : ""}
+            `;
+            chatLayers.appendChild(div);
+
+            div.addEventListener("click", () => openChatWithUser(friend.user_id, friend.user_name));
+        });
+    });
+
+// ================= Badge Helpers =================
+function incrementBadge(userId) {
+    const layer = document.querySelector(`.chat-layer[data-user-id='${userId}']`);
+    if (!layer) return;
+    let badge = layer.querySelector(".badge");
+    if (!badge) {
+        badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = "1";
+        layer.appendChild(badge);
+    } else {
+        badge.textContent = parseInt(badge.textContent) + 1;
+    }
+}
+
+function removeBadge(userId) {
+    const layer = document.querySelector(`.chat-layer[data-user-id='${userId}']`);
+    if (!layer) return;
+    const badge = layer.querySelector(".badge");
+    if (badge) badge.remove();
+}
+
+function markMessagesRead(userId) {
+    fetch("mark_messages_read.php", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sender_id: userId })
+    });
+}
+
+// ================= Inbox Badge Update =================
+function updateInboxBadge() {
+    fetch("get_unread_count.php")
+        .then(res => res.json())
+        .then(data => {
+            const inboxLink = document.querySelector("a[href='inbox.php']");
+            if (inboxLink) {
+                inboxLink.innerHTML = `📩 Inbox ${data.total_unread > 0 ? `<span class='badge' style='color:red;'>${data.total_unread}</span>` : ""}`;
+            }
+        });
+}
+setInterval(updateInboxBadge, 5000);
+
+
+</script>
 
 <!-- 🎥 Videos Button -->
 <button id="reelsButton" style="
@@ -421,7 +926,6 @@ function loadComments(postId) {
             commentList.innerHTML = `<p style="text-align:center; color:red;">Failed to load comments.</p>`;
         });
 }
-
 function renderComment(c, container) {
     const div = document.createElement('div');
     div.className = 'comment';
@@ -432,7 +936,9 @@ function renderComment(c, container) {
 
     div.innerHTML = `
         <strong style="color:#1877f2;">${c.user_name}</strong> 
-        <span style="font-size:0.75em; color:#ccc; margin-left:5px;">${timeAgo(c.created_at)}</span>
+        <span class="timestamp" data-created="${c.created_at}" style="font-size:0.75em; color:#ccc; margin-left:5px;">
+            ${timeAgo(c.created_at)}
+        </span>
         <p>${c.content}</p>
         <span class="reply-button" style="cursor:pointer; color:#ccc;" onclick="showReplyInput(${c.id})">Reply</span>
         <div class="replies" style="margin-left:15px;"></div>
@@ -440,10 +946,12 @@ function renderComment(c, container) {
 
     container.appendChild(div);
 
+    // Render replies recursively
     if (c.replies && c.replies.length) {
         c.replies.forEach(r => renderComment(r, div.querySelector('.replies')));
     }
 }
+
 
 function showReplyInput(commentId) {
     const commentDiv = document.querySelector(`.comment[data-id="${commentId}"]`);
@@ -504,16 +1012,49 @@ function postComment(postId, content, parentId = 0, callback = null) {
         alert("Failed to post comment");
     });
 }
-
 function timeAgo(datetime) {
     const now = new Date();
     const past = new Date(datetime);
-    const diff = Math.floor((now - past)/1000);
-    if (diff < 60) return `${diff} sec ago`;
-    if (diff < 3600) return `${Math.floor(diff/60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff/3600)} hrs ago`;
-    return `${Math.floor(diff/86400)} days ago`;
+    let diff = Math.floor((now - past)/1000);
+    if (diff < 0) diff = 0;
+
+    if (diff < 60) return `${diff} sec${diff !== 1 ? 's' : ''} ago`;
+    if (diff < 3600) {
+        const m = Math.floor(diff/60);
+        return `${m} min${m !== 1 ? 's' : ''} ago`;
+    }
+    if (diff < 86400) {
+        const h = Math.floor(diff/3600);
+        return `${h} hr${h !== 1 ? 's' : ''} ago`;
+    }
+    const d = Math.floor(diff/86400);
+    return `${d} day${d !== 1 ? 's' : ''} ago`;
 }
+setInterval(() => {
+    document.querySelectorAll('.comment .timestamp').forEach(el => {
+        const datetime = el.getAttribute('data-created');
+        el.textContent = timeAgo(datetime);
+    });
+}, 1000);
+// Unified submit function
+function submitComment() {
+    const text = commentInput.value.trim();
+    if (!text || !currentPostId) return;
+
+    postComment(currentPostId, text, 0, newComment => {
+        renderComment(newComment, commentList);
+        commentInput.value = ""; // clear input
+    });
+}
+
+// Enter key to submit (without Shift)
+commentInput.addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submitComment();
+    }
+});
+
 
 commentSubmit.addEventListener('click', () => {
     const text = commentInput.value.trim();
@@ -522,10 +1063,6 @@ commentSubmit.addEventListener('click', () => {
         renderComment(newComment, commentList);
     });
 });
-
-
-
-
 
 
 function shareVideo() {
@@ -704,10 +1241,10 @@ videoWrapper.addEventListener('touchend', (e) => {
     color: #ffffffff; /* white */
 }
 .replyInput input {
-    background: #070707ff; /* very dark */
+    background: #fffefeff; /* very dark */
 }
 .replyInput input:focus {
-    background: #000000ff;
+    background: #ffffffff;
 }
 
 
@@ -873,9 +1410,7 @@ videoWrapper.addEventListener('touchend', (e) => {
     <!-- Your layout with left-sidebar, wrapper, right-sidebar -->
 
   <div class="main-container"> 
-<a href="inbox.php" class="button">
-  📩 Inbox <?= $unreadCount > 0 ? "<span class='badge'>$unreadCount</span>" : "" ?>
-</a>
+
  
 <div class="friend-request-container">
   <a href="view_friend_request.php" class="friend-request-link">

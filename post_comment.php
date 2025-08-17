@@ -11,7 +11,7 @@ if (!isset($_SESSION['user_id'])) {
 $data = json_decode(file_get_contents('php://input'), true);
 $post_id = intval($data['post_id'] ?? 0);
 $parent_id = intval($data['parent_id'] ?? 0);
-$content = trim($data['comment'] ?? '');
+$content = trim($data['content'] ?? ''); // <-- fixed key here
 $user_id = $_SESSION['user_id'];
 
 if (!$post_id || $content === '') {
@@ -31,18 +31,20 @@ if ($stmt->execute()) {
     $res = $stmt2->get_result();
     $user = $res->fetch_assoc();
 
-    echo json_encode([
-        "success" => true,
-        "new_comment" => [
-            "id" => $stmt->insert_id,
-            "post_id" => $post_id,
-            "user_id" => $user_id,
-            "parent_id" => $parent_id,
-            "content" => $content,
-            "user_name" => $user['user_name'],
-            "replies" => []
-        ]
-    ]);
+ echo json_encode([
+    "success" => true,
+    "new_comment" => [
+        "id" => $stmt->insert_id,
+        "post_id" => $post_id,
+        "user_id" => $user_id,
+        "parent_id" => $parent_id,
+        "content" => $content,
+        "user_name" => $user['user_name'],
+        "created_at" => date('c'), // <-- add this line
+        "replies" => []
+    ]
+]);
+
 } else {
     echo json_encode(["success" => false, "message" => "Insert failed"]);
 }

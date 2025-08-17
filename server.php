@@ -5,7 +5,8 @@ use Ratchet\ConnectionInterface;
 require __DIR__ . '/vendor/autoload.php';
 
 class ChatServer implements MessageComponentInterface {
-    protected $clients;
+    protected $clients; // SplObjectStorage
+    protected $userMap = []; // user_id => ConnectionInterface
 
     public function __construct() {
         $this->clients = new \SplObjectStorage;
@@ -17,17 +18,34 @@ class ChatServer implements MessageComponentInterface {
     }
 
     public function onMessage(ConnectionInterface $from, $msg) {
-        foreach ($this->clients as $client) {
-            if ($from !== $client) {
-                $client->send($msg);
-            }
+        $data = json_decode($msg, true);
+
+        if ($data['type'] === 'init') {
+            $this->userMap[$data['user_id']] = $from;
+            echo "✅ User {$data['user_id']} registered on {$from->resourceId}\n";
+            return;
         }
-        echo "📨 Message from {$from->resourceId}: $msg\n";
+
+       if ($data['type'] === 'chat') {
+        $receiverId = $data['receiver_id'];
+        
+        // Send to receiver only
+        if (isset($this->userMap[$receiverId])) {
+            $this->userMap[$receiverId]->send(json_encode($data));
+        }
+            // Echo back to sender
+            $from->send(json_encode($data));
+            echo "📨 {$data['sender_id']} -> {$receiverId}: {$data['message']}\n";
+        }
     }
 
     public function onClose(ConnectionInterface $conn) {
         $this->clients->detach($conn);
-        echo "🔴 Connection {$conn->resourceId} disconnected\n";
+        // Remove from userMap
+        foreach ($this->userMap as $userId => $client) {
+            if ($client === $conn) unset($this->userMap[$userId]);
+        }
+        echo "🔴 {$conn->resourceId} disconnected\n";
     }
 
     public function onError(ConnectionInterface $conn, \Exception $e) {
@@ -36,13 +54,14 @@ class ChatServer implements MessageComponentInterface {
     }
 }
 
+// --- Run the WebSocket server ---
 $server = \Ratchet\Server\IoServer::factory(
     new \Ratchet\Http\HttpServer(
         new \Ratchet\WebSocket\WsServer(
             new ChatServer()
         )
     ),
-    8080 // Change this port if needed
+    8080 // WebSocket port
 );
 
 echo "✅ WebSocket server running at ws://localhost:8080\n";
