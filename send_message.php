@@ -28,9 +28,7 @@ if ($message === '' && empty($_FILES['media']['name'])) {
 // --- Handle media upload ---
 if (!empty($_FILES['media']['name']) && $_FILES['media']['error'] === UPLOAD_ERR_OK) {
     $uploadDir = 'uploads/messages/';
-    if (!is_dir($uploadDir)) {
-        mkdir($uploadDir, 0777, true);
-    }
+    if (!is_dir($uploadDir)) mkdir($uploadDir, 0777, true);
 
     $fileTmp = $_FILES['media']['tmp_name'];
     $fileName = basename($_FILES['media']['name']);
@@ -38,9 +36,9 @@ if (!empty($_FILES['media']['name']) && $_FILES['media']['error'] === UPLOAD_ERR
     $media_path = $uploadDir . time() . "_" . $safeFileName;
 
     $ext = strtolower(pathinfo($media_path, PATHINFO_EXTENSION));
-    if (in_array($ext, ['jpg', 'jpeg', 'png', 'gif'])) {
+    if (in_array($ext, ['jpg','jpeg','png','gif'])) {
         $media_type = 'image';
-    } elseif (in_array($ext, ['mp4', 'webm', 'ogg'])) {
+    } elseif (in_array($ext, ['mp4','webm','ogg'])) {
         $media_type = 'video';
     } else {
         $media_path = $media_type = null;
@@ -61,9 +59,9 @@ $stmt->bind_param("iisss", $sender_id, $receiver_id, $message, $media_path, $med
 if ($stmt->execute()) {
     $msg_id = $conn->insert_id;
 
-    // Fetch full row with sender name
+    // --- Fetch full row with sender name & avatar ---
     $msgRowStmt = $conn->prepare("
-        SELECT pm.*, u.name AS sender_name
+        SELECT pm.*, u.name AS sender_name, u.avatar AS sender_avatar
         FROM private_messages pm
         JOIN users u ON pm.sender_id = u.id
         WHERE pm.id = ?
@@ -75,31 +73,21 @@ if ($stmt->execute()) {
     if ($msgRow) {
         $response['success'] = true;
         $response['message'] = [
-            'id'          => (int)$msgRow['id'],
-            'sender_id'   => (int)$msgRow['sender_id'],
-            'receiver_id' => (int)$msgRow['receiver_id'],
-            'sender_name' => $msgRow['sender_name'],
-            'message'     => $msgRow['message'],
-            'created_at'  => $msgRow['created_at'],
-            'media_path'  => $msgRow['media_path'],
-            'media_type'  => $msgRow['media_type']
+            'id'            => (int)$msgRow['id'],
+            'sender_id'     => (int)$msgRow['sender_id'],
+            'receiver_id'   => (int)$msgRow['receiver_id'],
+            'sender_name'   => $msgRow['sender_name'],
+            'sender_avatar' => $msgRow['sender_avatar'] ?: 'default-avatar.png', // FB-style avatar
+            'message'       => $msgRow['message'],
+            'created_at'    => $msgRow['created_at'],
+            'media_path'    => $msgRow['media_path'],
+            'media_type'    => $msgRow['media_type']
         ];
 
-        // --- Push to Node.js WebSocket server ---
-        $data = [
-            'type'        => 'chat',
-            'id'          => $msgRow['id'],
-            'sender_id'   => $msgRow['sender_id'],
-            'receiver_id' => $msgRow['receiver_id'],
-            'sender_name' => $msgRow['sender_name'],
-            'message'     => $msgRow['message'],
-            'created_at'  => $msgRow['created_at'],
-            'media_path'  => $msgRow['media_path'],
-            'media_type'  => $msgRow['media_type']
-        ];
+        // --- Push to WebSocket server ---
+        $payload = json_encode(array_merge(['type'=>'chat'], $response['message'])) . "\n";
 
-        $payload = json_encode($data) . "\n"; // important for Node.js stream parsing
-
+        // Node.js TCP push (or Ratchet could be adapted similarly)
         $fp = @fsockopen("127.0.0.1", 3001, $errno, $errstr, 1);
         if ($fp) {
             fwrite($fp, $payload);

@@ -7,12 +7,11 @@ header('Content-Type: application/json');
 $response = [
     'success' => false,
     'message' => '',
-    'id' => null,
-    'name' => null,
-    'avatar' => 'default-avatar.png'
+    'id'      => null,
+    'name'    => null,
+    'avatar'  => 'uploads/default-avatar.png'
 ];
 
-// Ensure user is logged in
 if (!isset($_SESSION['user_id'])) {
     $response['message'] = 'User not logged in';
     echo json_encode($response);
@@ -21,7 +20,6 @@ if (!isset($_SESSION['user_id'])) {
 
 $currentUserId = intval($_SESSION['user_id']);
 
-// Fetch user info
 $stmt = $conn->prepare("SELECT id, name, avatar_path FROM users WHERE id = ?");
 $stmt->bind_param("i", $currentUserId);
 $stmt->execute();
@@ -34,10 +32,9 @@ if (!$user) {
     exit;
 }
 
-// Success
 $response['success'] = true;
 $response['id']      = (int)$user['id'];
 $response['name']    = $user['name'];
-$response['avatar'] = $user['avatar_path'] ?: 'default-avatar.png';
+$response['avatar']  = !empty($user['avatar_path']) ? $user['avatar_path'] : 'uploads/default-avatar.png';
 
 echo json_encode($response);

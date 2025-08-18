@@ -149,19 +149,34 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 
 <!-- Chat Widget -->
 <div id="chatWidget" class="chat-widget">
+  <!-- Chat Header -->
   <div class="chat-header">
-     <img id="myAvatar" src="default-avatar.png" class="avatar">
-        <span id="myName"></span>
-    <span id="chatUserName">Chat</span>
+    <div class="chat-header-left">
+       <a id="chatUserAvatarLink" href="#"><img id="chatUserAvatar" class="avatar" src="uploads/default-avatar.png" alt="avatar"></a>
+      <span id="chatUserName">Chat</span>
+    </div>
     <button id="closeChat">✕</button>
   </div>
+
+  <!-- Chat Messages -->
   <div id="chatMessages" class="chat-messages"></div>
-  <div id="typingIndicator" class="typing-indicator" style="display:none;">Typing...</div>
+
+  <!-- Typing Indicator -->
+  <div id="typingIndicator" class="typing-indicator" style="display:none;">
+    <span class="name"></span>
+    <span>is typing</span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+    <span class="dot"></span>
+  </div>
+
+  <!-- Chat Form -->
   <form id="chatFormWidget" class="chat-form">
     <textarea id="chatInput" rows="2" placeholder="Type a message..."></textarea>
     <button type="submit">Send</button>
   </form>
 </div>
+
 
 <style>
   .chat-header {
@@ -368,12 +383,96 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 .chat-layer:hover {
   transform: translateX(5px);
 }
+.message-container {
+    display: flex;
+    align-items: flex-end;
+    margin-bottom: 10px;
+}
 
+.my-message {
+    justify-content: flex-end;
+}
+
+.their-message {
+    justify-content: flex-start;
+}
+
+.message-container .avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    margin: 0 8px;
+}
+
+.bubble {
+    max-width: 70%;
+    padding: 10px;
+    border-radius: 18px;
+    background: #e4e6eb;
+    word-wrap: break-word;
+}
+
+.my-message .bubble {
+    background: #0084ff;
+    color: #fff;
+    border-bottom-right-radius: 0;
+}
+
+.their-message .bubble {
+    background: #e4e6eb;
+    color: #000;
+    border-bottom-left-radius: 0;
+}
+/* Typing indicator container */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: #666;
+  margin: 5px 0 10px 10px;
+  gap: 4px;
+}
+
+/* Three bouncing dots */
+.typing-indicator .dot {
+  width: 6px;
+  height: 6px;
+  background: #666;
+  border-radius: 50%;
+  display: inline-block;
+  animation: bounce 1.3s infinite;
+}
+
+.typing-indicator .dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator .dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0);
+  }
+  40% {
+    transform: scale(1);
+  }
+}
+
+.message-container a {
+    display: inline-block;
+}
+
+.message-container a img.avatar {
+    cursor: pointer;
+}
 
 </style>
 
 <script>
 
+// ================= Variables =================
 // ================= Variables =================
 const chatLayers = document.getElementById("chatLayers");
 const chatWidget = document.getElementById("chatWidget");
@@ -384,34 +483,35 @@ const chatInput = document.getElementById("chatInput");
 const chatMessages = document.getElementById("chatMessages");
 const chatUserName = document.getElementById("chatUserName");
 const typingIndicator = document.getElementById("typingIndicator");
+const myAvatarEl = document.getElementById("myAvatar");
+const myNameEl = document.getElementById("myName");
+const chatUserAvatarEl = document.getElementById("chatUserAvatar");
 
 let currentUserId = <?= $_SESSION['user_id'] ?? 0 ?>;
 let activeChatId = null;
-let openChats = {}; // { userId: { name, messages: [] } }
-let myProfile = {};
+let openChats = {}; // { userId: { name, avatar, messages: [] } }
+let typingTimer;
+let myProfile = { id: currentUserId, name: "Me", avatar: "uploads/default-avatar.png" };
 
-// ================= Load my profile =================
-// Fetch my profile and update chat header
-fetch('get_my_profile.php')
-    .then(res => res.json())
-    .then(data => {
-        if (data && data.success) {
-            myProfile = data;
-
-            const avatarEl = document.getElementById('myAvatar');
-            const nameEl   = document.getElementById('myName');
-
-            if (avatarEl) avatarEl.src = myProfile.avatar || 'default-avatar.png';
-            if (nameEl) nameEl.innerText = myProfile.name || 'Me';
-
-            // Now you can safely render messages
-            if (activeChatId && openChats[activeChatId]) renderMessages();
-        } else {
-            console.error("Failed to load profile:", data.message);
-        }
-    })
-    .catch(err => console.error("Error fetching profile:", err));
-
+// ================= Load My Profile =================
+document.addEventListener("DOMContentLoaded", () => {
+    fetch("get_my_profile.php")
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                myProfile = {
+                    id: data.id,
+                    name: data.name,
+                    avatar: data.avatar || "uploads/default-avatar.png"
+                };
+                if (myAvatarEl) myAvatarEl.src = myProfile.avatar;
+                if (myNameEl) myNameEl.innerText = myProfile.name;
+            } else {
+                console.error("Failed to load profile:", data.message);
+            }
+        })
+        .catch(err => console.error("Error fetching profile:", err));
+});
 
 // ================= WebSocket =================
 const socket = new WebSocket("ws://localhost:8080");
@@ -422,27 +522,31 @@ socket.addEventListener("open", () => {
 
 socket.addEventListener("message", event => {
     const msg = JSON.parse(event.data);
+    if (!msg.type) return;
 
-    if (msg.type === "chat") {
-        const otherUser = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+    switch(msg.type) {
+        case "chat":
+            const otherUser = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
+            if (!openChats[otherUser]) openChats[otherUser] = { messages: [], name: msg.sender_name || "User", avatar: msg.sender_avatar || 'uploads/default-avatar.png' };
+            openChats[otherUser].messages.push(msg);
 
-        if (!openChats[otherUser]) openChats[otherUser] = { messages: [], name: msg.sender_name || "User" };
-        openChats[otherUser].messages.push(msg);
+            if (activeChatId === otherUser) {
+                renderMessages();         
+                removeBadge(otherUser);   
+                markMessagesRead(otherUser);
+            } else if (msg.sender_id !== currentUserId) {
+                incrementBadge(otherUser);
+            }
+            break;
 
-        if (activeChatId === otherUser) {
-            renderMessages();
-            removeBadge(otherUser);
-            markMessagesRead(otherUser);
-        } else if (msg.sender_id !== currentUserId) {
-            incrementBadge(otherUser);
-        }
-    }
-
-    if (msg.type === "typing" && activeChatId === msg.sender_id) {
-        typingIndicator.style.display = "block";
-        typingIndicator.innerText = `${msg.sender_name} is typing...`;
-        clearTimeout(window.typingTimeout);
-        window.typingTimeout = setTimeout(() => typingIndicator.style.display = "none", 2000);
+        case "typing":
+            if (activeChatId === msg.sender_id) {
+                typingIndicator.style.display = "block";
+                typingIndicator.innerText = `${msg.sender_name} is typing...`;
+                clearTimeout(window.typingTimeout);
+                window.typingTimeout = setTimeout(() => typingIndicator.style.display = "none", 2000);
+            }
+            break;
     }
 });
 
@@ -451,39 +555,43 @@ openChatBtn.addEventListener("click", () => chatWidget.style.display = "flex");
 closeChatBtn.addEventListener("click", () => chatWidget.style.display = "none");
 
 // ================= Open Chat =================
-function openChatWithUser(userId, userName) {
+// Open chat with a user
+function openChatWithUser(userId, userName, userAvatar = 'uploads/default-avatar.png') {
     activeChatId = userId;
     chatUserName.innerText = userName;
     chatWidget.style.display = "flex";
+
+    // Update header avatar link
+    const chatHeaderLink = document.getElementById("chatUserAvatarLink");
+    const chatHeaderAvatar = document.getElementById("chatUserAvatar");
+    if(chatHeaderLink) chatHeaderLink.href = `view_profile.php?id=${userId}`;
+    if(chatHeaderAvatar) chatHeaderAvatar.src = userAvatar;
+
     removeBadge(userId);
 
-    // Initialize chat if it doesn't exist
-    if (!openChats[userId]) openChats[userId] = { messages: [] };
+    if (!openChats[userId]) openChats[userId] = { messages: [], name: userName, avatar: userAvatar };
 
-    // Load messages only if not already loaded
     if (openChats[userId].messages.length === 0) {
         fetch(`private_load_message.php?user_id=${userId}`)
             .then(res => res.json())
             .then(data => {
                 if (data.success) {
-                    // Store messages
                     openChats[userId].messages = data.messages;
-
-                    // Render messages
                     renderMessages();
-
-                    // Mark messages as read if any exist
                     if (data.messages.length > 0) markMessagesRead(userId);
-                } else {
-                    console.error("Failed to load messages:", data.error || "Unknown error");
+
+                    const firstMsg = data.messages.find(m => m.sender_id === userId);
+                    if (firstMsg && firstMsg.sender_avatar) {
+                        openChats[userId].avatar = firstMsg.sender_avatar;
+                        if(chatHeaderAvatar) chatHeaderAvatar.src = firstMsg.sender_avatar;
+                    }
                 }
-            })
-            .catch(err => console.error("Error fetching messages:", err));
+            });
     } else {
-        // If messages already loaded, just render them
         renderMessages();
     }
 }
+
 
 // ================= Render Messages =================
 function renderMessages() {
@@ -494,54 +602,57 @@ function renderMessages() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+// Render each message
 function renderMessage(msg, save = false) {
     if (!msg) return;
 
     const div = document.createElement("div");
     div.className = "message " + (msg.sender_id === currentUserId ? "my-message" : "their-message");
 
-    // Use sender_avatar for all messages; fallback to myProfile.avatar if it's your message
-    const avatarSrc = msg.sender_avatar || (msg.sender_id === currentUserId ? myProfile.avatar : 'default-avatar.png');
+    const avatarSrc = msg.sender_avatar || (msg.sender_id === currentUserId ? myProfile.avatar : 'uploads/default-avatar.png');
 
     div.innerHTML = `
-        <img class="avatar" src="${avatarSrc}" alt="avatar">
-        <div class="bubble">
-            <strong>${msg.sender_name}</strong><br>
-            ${msg.message.replace(/\n/g, "<br>")}
-            <br><small>${msg.created_at}</small>
-            ${msg.media_path && msg.media_type === "image" ? `<br><img src="${msg.media_path}" style="max-width:100%;">` : ""}
-            ${msg.media_path && msg.media_type === "video" ? `<br><video controls style="max-width:100%;"><source src="${msg.media_path}" type="video/mp4"></video>` : ""}
+        <div class="message-container">
+            ${msg.sender_id !== currentUserId 
+                ? `<img class="avatar" src="${avatarSrc}" alt="avatar" onclick="window.location.href='view_profile.php?id=${msg.sender_id}'">` 
+                : ""}
+            <div class="bubble">
+                ${msg.sender_id !== currentUserId ? `<strong>${msg.sender_name}</strong><br>` : ""}
+                ${msg.message.replace(/\n/g, "<br>")}
+                ${msg.media_path && msg.media_type === "image" ? `<br><img src="${msg.media_path}" style="max-width:100%;">` : ""}
+                ${msg.media_path && msg.media_type === "video" ? `<br><video controls style="max-width:100%;"><source src="${msg.media_path}" type="video/mp4"></video>` : ""}
+                <br><small>${msg.created_at}</small>
+            </div>
+            ${msg.sender_id === currentUserId 
+                ? `<img class="avatar" src="${avatarSrc}" alt="avatar" onclick="window.location.href='view_profile.php?id=${msg.sender_id}'">` 
+                : ""}
         </div>
     `;
 
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    if (save && activeChatId) {
-        openChats[activeChatId].messages.push(msg);
-    }
+    if (save && activeChatId) openChats[activeChatId].messages.push(msg);
 }
-
 
 // ================= Send Message =================
 chatForm.addEventListener("submit", e => {
     e.preventDefault();
     const text = chatInput.value.trim();
     const fileInput = chatForm.querySelector("input[type='file']");
-
     if (!text && (!fileInput || !fileInput.files.length)) return;
 
     const formData = new FormData();
     formData.append("receiver_id", activeChatId);
     formData.append("message", text);
-
-    if (fileInput && fileInput.files.length > 0) formData.append("media", fileInput.files[0]);
+    if (fileInput && fileInput.files.length > 0) {
+        formData.append("media", fileInput.files[0]);
+    }
 
     fetch("send_message.php", { method: "POST", body: formData })
         .then(res => res.json())
         .then(resp => {
             if (resp.success && resp.message) {
-                renderMessage(resp.message);
                 chatInput.value = "";
                 if (fileInput) fileInput.value = "";
                 socket.send(JSON.stringify({ type: "chat", ...resp.message }));
@@ -549,7 +660,7 @@ chatForm.addEventListener("submit", e => {
         });
 });
 
-// Enter key shortcut
+// ================= Enter key shortcut =================
 chatInput.addEventListener("keydown", e => {
     if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
@@ -563,10 +674,18 @@ chatInput.addEventListener("input", () => {
     socket.send(JSON.stringify({
         type: "typing",
         sender_id: currentUserId,
-        sender_name: "You",
+        sender_name: myProfile?.name || "Someone",
         receiver_id: activeChatId
     }));
+    resetTypingIndicator();
 });
+
+function resetTypingIndicator() {
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => {
+        if (typingIndicator) typingIndicator.style.display = "none";
+    }, 2000);
+}
 
 // ================= Friends List =================
 fetch("get_friends_chats.php")
@@ -584,7 +703,7 @@ fetch("get_friends_chats.php")
             `;
             chatLayers.appendChild(div);
 
-            div.addEventListener("click", () => openChatWithUser(friend.user_id, friend.user_name));
+            div.addEventListener("click", () => openChatWithUser(friend.user_id, friend.user_name, friend.avatar));
         });
     });
 
@@ -630,6 +749,7 @@ function updateInboxBadge() {
         });
 }
 setInterval(updateInboxBadge, 5000);
+
 
 
 </script>
