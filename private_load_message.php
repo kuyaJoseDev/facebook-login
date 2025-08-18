@@ -34,7 +34,7 @@ $offset = isset($_GET['offset']) ? max(0, (int) $_GET['offset']) : 0;
 
 // --- Fetch messages (newest first, then reversed for display) ---
 $query = "
-    SELECT pm.*, u.name AS sender_name, u.avatar_path AS sender_avatar
+    SELECT pm.*, u.name AS sender_name
     FROM private_messages pm
     JOIN users u ON pm.sender_id = u.id
     WHERE (pm.sender_id = ? AND pm.receiver_id = ?)
@@ -56,16 +56,15 @@ $result = $stmt->get_result();
 $messages = [];
 while ($row = $result->fetch_assoc()) {
     $messages[] = [
-        "id"            => (int) $row['id'],
-        "sender_id"     => (int) $row['sender_id'],
-        "receiver_id"   => (int) $row['receiver_id'],
-        "sender_name"   => $row['sender_name'],
-        "sender_avatar" => $row['sender_avatar'] ?: 'default-avatar.png', // ✅ Add this
-        "message"       => $row['message'],
-        "created_at"    => $row['created_at'],
-        "media_path"    => $row['media_path'] ?: null,
-        "media_type"    => $row['media_type'] ?: null,
-        "is_read"       => (int) $row['is_read']
+        "id"          => (int) $row['id'],
+        "sender_id"   => (int) $row['sender_id'],
+        "receiver_id" => (int) $row['receiver_id'],
+        "sender_name" => $row['sender_name'],
+        "message"     => $row['message'],
+        "created_at"  => $row['created_at'],
+        "media_path"  => $row['media_path'] ?: null,
+        "media_type"  => $row['media_type'] ?: null,
+        "is_read"     => (int) $row['is_read']
     ];
 }
 
