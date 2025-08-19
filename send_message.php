@@ -59,7 +59,7 @@ $stmt->bind_param("iisss", $sender_id, $receiver_id, $message, $media_path, $med
 if ($stmt->execute()) {
     $msg_id = $conn->insert_id;
 
-    // --- Fetch full row with sender name & avatar ---
+    // --- Fetch full message with sender info ---
     $msgRowStmt = $conn->prepare("
         SELECT pm.*, u.name AS sender_name, u.avatar AS sender_avatar
         FROM private_messages pm
@@ -77,7 +77,7 @@ if ($stmt->execute()) {
             'sender_id'     => (int)$msgRow['sender_id'],
             'receiver_id'   => (int)$msgRow['receiver_id'],
             'sender_name'   => $msgRow['sender_name'],
-            'sender_avatar' => $msgRow['sender_avatar'] ?: 'default-avatar.png', // FB-style avatar
+            'sender_avatar' => $msgRow['sender_avatar'] ?: 'uploads/default-avatar.png',
             'message'       => $msgRow['message'],
             'created_at'    => $msgRow['created_at'],
             'media_path'    => $msgRow['media_path'],
@@ -87,7 +87,7 @@ if ($stmt->execute()) {
         // --- Push to WebSocket server ---
         $payload = json_encode(array_merge(['type'=>'chat'], $response['message'])) . "\n";
 
-        // Node.js TCP push (or Ratchet could be adapted similarly)
+        // Push via TCP to Node.js WS server
         $fp = @fsockopen("127.0.0.1", 3001, $errno, $errstr, 1);
         if ($fp) {
             fwrite($fp, $payload);

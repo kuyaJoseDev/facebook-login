@@ -19,14 +19,18 @@ wss.on("connection", ws => {
         }
 
         // --- Typing indicator ---
-        if (msg.type === "typing" && msg.receiver_id) {
+        if (msg.type === "typing" && msg.sender_id && msg.receiver_id) {
             const receiver = clients[msg.receiver_id];
-            if (receiver?.readyState === WebSocket.OPEN) {
-                receiver.send(JSON.stringify(msg));
+            if (receiver?.readyState === WebSocket.OPEN && msg.sender_id !== msg.receiver_id) {
+                receiver.send(JSON.stringify({
+                    type: "typing",
+                    sender_id: msg.sender_id,
+                    sender_name: msg.sender_name
+                }));
             }
         }
 
-        // --- Chat message from browser ---
+        // --- Chat message ---
         if (msg.type === "chat" && msg.sender_id && msg.receiver_id) {
             [msg.sender_id, msg.receiver_id].forEach(id => {
                 const client = clients[id];
@@ -54,7 +58,7 @@ const tcpServer = net.createServer(socket => {
     socket.on("data", chunk => {
         buffer += chunk.toString();
         const lines = buffer.split("\n");
-        buffer = lines.pop(); // keep partial line
+        buffer = lines.pop();
 
         for (const line of lines) {
             if (!line.trim()) continue;

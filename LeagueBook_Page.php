@@ -152,10 +152,12 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
   <!-- Chat Header -->
   <div class="chat-header">
     <div class="chat-header-left">
-       <a id="chatUserAvatarLink" href="#"><img id="chatUserAvatar" class="avatar" src="uploads/default-avatar.png" alt="avatar"></a>
+      <a id="chatUserAvatarLink" href="#">
+        <img id="chatUserAvatar" class="avatar" src="uploads/default-avatar.png" alt="User Avatar">
+      </a>
       <span id="chatUserName">Chat</span>
     </div>
-    <button id="closeChat">✕</button>
+    <button id="closeChat" class="chat-close-btn">✕</button>
   </div>
 
   <!-- Chat Messages -->
@@ -163,19 +165,17 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 
   <!-- Typing Indicator -->
   <div id="typingIndicator" class="typing-indicator" style="display:none;">
-    <span class="name"></span>
-    <span>is typing</span>
-    <span class="dot"></span>
-    <span class="dot"></span>
-    <span class="dot"></span>
+    <span id="typingUserName"></span> is typing...
   </div>
 
   <!-- Chat Form -->
   <form id="chatFormWidget" class="chat-form">
-    <textarea id="chatInput" rows="2" placeholder="Type a message..."></textarea>
-    <button type="submit">Send</button>
+    <textarea id="chatInput" rows="2" placeholder="Type a message..." autocomplete="off"></textarea>
+    <button type="submit" class="chat-send-btn">Send</button>
   </form>
 </div>
+
+
 
 
 <style>
@@ -423,41 +423,26 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
     color: #000;
     border-bottom-left-radius: 0;
 }
-/* Typing indicator container */
 .typing-indicator {
   display: flex;
   align-items: center;
-  font-size: 14px;
-  color: #666;
-  margin: 5px 0 10px 10px;
-  gap: 4px;
+  font-style: italic;
+  color: black;
+  margin: 5px 10px;
 }
 
-/* Three bouncing dots */
 .typing-indicator .dot {
-  width: 6px;
-  height: 6px;
-  background: #666;
-  border-radius: 50%;
-  display: inline-block;
-  animation: bounce 1.3s infinite;
+  animation: blink 1.4s infinite both;
+  margin-left: 2px;
 }
 
-.typing-indicator .dot:nth-child(2) {
-  animation-delay: 0.2s;
-}
+.typing-indicator .dot:nth-child(3) { animation-delay: 0s; }
+.typing-indicator .dot:nth-child(4) { animation-delay: 0.2s; }
+.typing-indicator .dot:nth-child(5) { animation-delay: 0.4s; }
 
-.typing-indicator .dot:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes bounce {
-  0%, 80%, 100% {
-    transform: scale(0);
-  }
-  40% {
-    transform: scale(1);
-  }
+@keyframes blink {
+  0%, 80%, 100% { opacity: 0; }
+  40% { opacity: 1; }
 }
 
 .message-container a {
@@ -486,11 +471,11 @@ const typingIndicator = document.getElementById("typingIndicator");
 const myAvatarEl = document.getElementById("myAvatar");
 const myNameEl = document.getElementById("myName");
 const chatUserAvatarEl = document.getElementById("chatUserAvatar");
+const typingUserName = document.getElementById("typingUserName");
 
 let currentUserId = <?= $_SESSION['user_id'] ?? 0 ?>;
 let activeChatId = null;
 let openChats = {}; // { userId: { name, avatar, messages: [] } }
-let typingTimer;
 let myProfile = { id: currentUserId, name: "Me", avatar: "uploads/default-avatar.png" };
 
 // ================= Load My Profile =================
@@ -669,23 +654,71 @@ chatInput.addEventListener("keydown", e => {
 });
 
 // ================= Typing Indicator =================
+let typingUsers = {};   // Track currently typing users
+let typingTimers = {};  // Timer per user
+let typingTimeout;      // Local timeout for stop_typing
+
+// When YOU type in the chat input, send typing signal
 chatInput.addEventListener("input", () => {
     if (!activeChatId) return;
+
     socket.send(JSON.stringify({
         type: "typing",
         sender_id: currentUserId,
-        sender_name: myProfile?.name || "Someone",
+        sender_name: myProfile.name,   // 👈 Make sure this = your real username (e.g., "Jose")
         receiver_id: activeChatId
     }));
-    resetTypingIndicator();
+
+    // Stop typing after 2s of inactivity
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => {
+        socket.send(JSON.stringify({
+            type: "stop_typing",
+            sender_id: currentUserId,
+            receiver_id: activeChatId
+        }));
+    }, 2000);
 });
 
-function resetTypingIndicator() {
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => {
-        if (typingIndicator) typingIndicator.style.display = "none";
-    }, 2000);
-}
+// Receive signals from WebSocket
+socket.addEventListener("message", event => {
+    const msg = JSON.parse(event.data);
+
+    // Show typing indicator for OTHER users
+    if (msg.type === "typing" && msg.sender_id !== currentUserId) {
+        typingUsers[msg.sender_id] = msg.sender_name || "Unknown";
+
+        typingUserName.innerText =
+            Object.values(typingUsers).join(", ") + " is typing...";
+        typingIndicator.style.display = "flex";
+
+        // Reset timer per user
+        clearTimeout(typingTimers[msg.sender_id]);
+        typingTimers[msg.sender_id] = setTimeout(() => {
+            delete typingUsers[msg.sender_id];
+
+            if (Object.keys(typingUsers).length === 0) {
+                typingIndicator.style.display = "none";
+            } else {
+                typingUserName.innerText =
+                    Object.values(typingUsers).join(", ") + " is typing...";
+            }
+        }, 2000);
+    }
+
+    // Handle stop_typing
+    if (msg.type === "stop_typing" && msg.sender_id !== currentUserId) {
+        delete typingUsers[msg.sender_id];
+        if (Object.keys(typingUsers).length === 0) {
+            typingIndicator.style.display = "none";
+        } else {
+            typingUserName.innerText =
+                Object.values(typingUsers).join(", ") + " is typing...";
+        }
+    }
+});
+
+
 
 // ================= Friends List =================
 fetch("get_friends_chats.php")
