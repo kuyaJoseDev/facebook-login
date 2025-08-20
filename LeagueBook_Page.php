@@ -2,54 +2,74 @@
 session_start();
 include("connect.php");
 
-$loggedInUserId = $_SESSION['user_id'] ?? null; // ensures variable is defined
-
-// Make sure this is after session_start() and include("connect.php")
-$unreadCount = 0; // Default value in case the query fails
-
-if (isset($_SESSION['user_id'])) {
-    $userId = $_SESSION['user_id'];
-
-    $stmt = $conn->prepare("
-        SELECT COUNT(*) AS unread_count 
-        FROM private_messages 
-        WHERE receiver_id = ? AND is_read = 0
-    ");
-    $stmt->bind_param("i", $userId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($row = $result->fetch_assoc()) {
-        $unreadCount = $row['unread_count'];
-    }
-}
-
-$update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
-$update->bind_param("i", $_SESSION['user_id']);
-$update->execute();
-
-
+// --- Ensure logged in ---
 if (!isset($_SESSION['user_id']) || !isset($_SESSION['email'])) {
     header("Location: LeagueBook.php");
     exit();
 }
 
-// 🔔 Count pending friend requests
+$userId = (int) $_SESSION['user_id'];
+
+// ✅ Always fetch the user's real name from DB
+$stmt = $conn->prepare("SELECT name FROM users WHERE id = ?");
+$stmt->bind_param("i", $userId);
+$stmt->execute();
+$stmt->bind_result($fetchedName);
+$stmt->fetch();
+$stmt->close();
+
+// If found, update session and use it
+if (!empty($fetchedName)) {
+    $_SESSION['user_name'] = $fetchedName;
+    $userName = $fetchedName;
+} else {
+    // fallback: keep old session value, else "Guest"
+    $userName = $_SESSION['user_name'] ?? 'Guest';
+}
+
+// --- Update last_active ---
+$update = $conn->prepare("UPDATE users SET last_active = NOW() WHERE id = ?");
+$update->bind_param("i", $userId);
+$update->execute();
+$update->close();
+
+// --- Unread private messages ---
+$unreadCount = 0;
+$stmt = $conn->prepare("
+    SELECT COUNT(*) AS unread_count 
+    FROM private_messages 
+    WHERE receiver_id = ? AND is_read = 0
+");
+$stmt->bind_param("i", $userId);
+$stmt->execute();
+$result = $stmt->get_result();
+if ($row = $result->fetch_assoc()) {
+    $unreadCount = (int) $row['unread_count'];
+}
+$stmt->close();
+
+// --- Pending friend requests ---
 $pending = 0;
-$checkPending = $conn->prepare("SELECT COUNT(*) AS total FROM friend_requests WHERE receiver_id = ? AND status = 'pending'");
-$checkPending->bind_param("i", $_SESSION['user_id']);
+$checkPending = $conn->prepare("
+    SELECT COUNT(*) AS total 
+    FROM friend_requests 
+    WHERE receiver_id = ? AND status = 'pending'
+");
+$checkPending->bind_param("i", $userId);
 $checkPending->execute();
 $pendingResult = $checkPending->get_result()->fetch_assoc();
 $pending = $pendingResult['total'];
+$checkPending->close();
 
-$userName = $_SESSION['user_name'] ?? 'Guest';
-$userId = $_SESSION['user_id'];
-
-// Handle friend request
+// --- Handle friend request action ---
 if (isset($_GET['receiver_id'])) {
     $receiverId = (int) $_GET['receiver_id'];
     if ($receiverId !== $userId) {
-        $check = $conn->prepare("SELECT * FROM friend_requests WHERE sender_id = ? AND receiver_id = ? AND status = 'pending'");
+        $check = $conn->prepare("
+            SELECT 1 
+            FROM friend_requests 
+            WHERE sender_id = ? AND receiver_id = ? AND status = 'pending'
+        ");
         $check->bind_param("ii", $userId, $receiverId);
         $check->execute();
         $checkResult = $check->get_result();
@@ -57,41 +77,47 @@ if (isset($_GET['receiver_id'])) {
         if ($checkResult->num_rows > 0) {
             $friendRequestMessage = "⚠️ You already sent a friend request to this user.";
         } else {
-            $insert = $conn->prepare("INSERT INTO friend_requests (sender_id, receiver_id, status, created_at) VALUES (?, ?, 'pending', NOW())");
+            $insert = $conn->prepare("
+                INSERT INTO friend_requests (sender_id, receiver_id, status, created_at) 
+                VALUES (?, ?, 'pending', NOW())
+            ");
             $insert->bind_param("ii", $userId, $receiverId);
-            $friendRequestMessage = $insert->execute() ? "✅ Friend request sent successfully." : "❌ Failed to send friend request.";
+            $friendRequestMessage = $insert->execute() 
+                ? "✅ Friend request sent successfully." 
+                : "❌ Failed to send friend request.";
+            $insert->close();
         }
+        $check->close();
     } else {
         $friendRequestMessage = "⚠️ You cannot send a friend request to yourself.";
     }
 }
-// Mark offline automatically
-$conn->query("UPDATE users SET status='offline' 
-             WHERE TIMESTAMPDIFF(SECOND, last_active, NOW()) > 120");
 
-$timeout_seconds = 120; // 2 minutes
-$sql = "SELECT * FROM users 
-        WHERE TIMESTAMPDIFF(SECOND, last_active, NOW()) <= ?"; // online users
-$stmt = $conn->prepare($sql);
-$stmt->bind_param("i", $timeout_seconds);
-$stmt->execute();
-$result = $stmt->get_result();
-// ✅ Fetch updated online_status for display
-// ✅ Get the user's last_active timestamp
+// --- Auto mark offline (inactive > 2 mins) ---
+$conn->query("UPDATE users 
+              SET status = 'offline' 
+              WHERE TIMESTAMPDIFF(SECOND, last_active, NOW()) > 120");
+
+// --- Check current user online/offline ---
 $getStatus = $conn->prepare("SELECT last_active FROM users WHERE id = ?");
-$getStatus->bind_param("i", $_SESSION['user_id']);
+$getStatus->bind_param("i", $userId);
 $getStatus->execute();
-$result = $getStatus->get_result();
-$user = $result->fetch_assoc();
+$user = $getStatus->get_result()->fetch_assoc();
+$getStatus->close();
 
-if ($user && (time() - strtotime($user['last_active']) <= 120)) {
-    echo "🟢 Online";
-} else {
-    echo "⚫ Offline";
-}
+$isOnline = ($user && (time() - strtotime($user['last_active']) <= 120));
+$onlineStatus = $isOnline ? "🟢 Online" : "⚫ Offline";
 
-
+// ==========================
+// ✅ Now you have variables:
+// $userId, $userName (always real name now)
+// $unreadCount, $pending
+// $friendRequestMessage (optional)
+// $onlineStatus (string)
+// ==========================
 ?>
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -459,24 +485,25 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 
 // ================= Variables =================
 // ================= Variables =================
-const chatLayers = document.getElementById("chatLayers");
-const chatWidget = document.getElementById("chatWidget");
-const openChatBtn = document.getElementById("openChatBtn");
-const closeChatBtn = document.getElementById("closeChat");
-const chatForm = document.getElementById("chatFormWidget");
-const chatInput = document.getElementById("chatInput");
-const chatMessages = document.getElementById("chatMessages");
-const chatUserName = document.getElementById("chatUserName");
-const typingIndicator = document.getElementById("typingIndicator");
-const myAvatarEl = document.getElementById("myAvatar");
-const myNameEl = document.getElementById("myName");
-const chatUserAvatarEl = document.getElementById("chatUserAvatar");
-const typingUserName = document.getElementById("typingUserName");
+const chatLayers        = document.getElementById("chatLayers");
+const chatWidget        = document.getElementById("chatWidget");
+const openChatBtn       = document.getElementById("openChatBtn");
+const closeChatBtn      = document.getElementById("closeChat");
+const chatForm          = document.getElementById("chatFormWidget");
+const chatInput         = document.getElementById("chatInput");
+const chatMessages      = document.getElementById("chatMessages");
+const chatUserName      = document.getElementById("chatUserName");
+const typingIndicator   = document.getElementById("typingIndicator");
+const myAvatarEl        = document.getElementById("myAvatar");
+const myNameEl          = document.getElementById("myName");
+const chatUserAvatarEl  = document.getElementById("chatUserAvatar");
+const typingUserName    = document.getElementById("typingUserName");
 
-let currentUserId = <?= $_SESSION['user_id'] ?? 0 ?>;
-let activeChatId = null;
-let openChats = {}; // { userId: { name, avatar, messages: [] } }
-let myProfile = { id: currentUserId, name: "Me", avatar: "uploads/default-avatar.png" };
+let currentUserId   = <?= json_encode($_SESSION['user_id'] ?? 0) ?>;
+let currentUserName = <?= json_encode($_SESSION['user_name'] ?? "Guest") ?>;
+let activeChatId    = null;
+let openChats       = {}; 
+let myProfile       = { id: currentUserId, name: currentUserName, avatar: "uploads/default-avatar.png" };
 
 // ================= Load My Profile =================
 document.addEventListener("DOMContentLoaded", () => {
@@ -489,6 +516,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     name: data.name,
                     avatar: data.avatar || "uploads/default-avatar.png"
                 };
+
                 if (myAvatarEl) myAvatarEl.src = myProfile.avatar;
                 if (myNameEl) myNameEl.innerText = myProfile.name;
             } else {
@@ -512,7 +540,9 @@ socket.addEventListener("message", event => {
     switch(msg.type) {
         case "chat":
             const otherUser = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
-            if (!openChats[otherUser]) openChats[otherUser] = { messages: [], name: msg.sender_name || "User", avatar: msg.sender_avatar || 'uploads/default-avatar.png' };
+            if (!openChats[otherUser]) {
+                openChats[otherUser] = { messages: [], name: msg.sender_name || "User", avatar: msg.sender_avatar || 'uploads/default-avatar.png' };
+            }
             openChats[otherUser].messages.push(msg);
 
             if (activeChatId === otherUser) {
@@ -532,24 +562,28 @@ socket.addEventListener("message", event => {
                 window.typingTimeout = setTimeout(() => typingIndicator.style.display = "none", 2000);
             }
             break;
+
+        case "stop_typing":
+            if (msg.sender_id === activeChatId) {
+                typingIndicator.style.display = "none";
+            }
+            break;
     }
 });
 
 // ================= Chat Widget Toggle =================
-openChatBtn.addEventListener("click", () => chatWidget.style.display = "flex");
-closeChatBtn.addEventListener("click", () => chatWidget.style.display = "none");
+if (openChatBtn) openChatBtn.addEventListener("click", () => chatWidget.style.display = "flex");
+if (closeChatBtn) closeChatBtn.addEventListener("click", () => chatWidget.style.display = "none");
 
 // ================= Open Chat =================
-// Open chat with a user
 function openChatWithUser(userId, userName, userAvatar = 'uploads/default-avatar.png') {
     activeChatId = userId;
     chatUserName.innerText = userName;
     chatWidget.style.display = "flex";
 
-    // Update header avatar link
-    const chatHeaderLink = document.getElementById("chatUserAvatarLink");
+    const chatHeaderLink   = document.getElementById("chatUserAvatarLink");
     const chatHeaderAvatar = document.getElementById("chatUserAvatar");
-    if(chatHeaderLink) chatHeaderLink.href = `view_profile.php?id=${userId}`;
+    if(chatHeaderLink)   chatHeaderLink.href = `view_profile.php?id=${userId}`;
     if(chatHeaderAvatar) chatHeaderAvatar.src = userAvatar;
 
     removeBadge(userId);
@@ -577,7 +611,6 @@ function openChatWithUser(userId, userName, userAvatar = 'uploads/default-avatar
     }
 }
 
-
 // ================= Render Messages =================
 function renderMessages() {
     if (!activeChatId || !openChats[activeChatId]) return;
@@ -587,7 +620,6 @@ function renderMessages() {
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-// Render each message
 function renderMessage(msg, save = false) {
     if (!msg) return;
 
@@ -621,104 +653,58 @@ function renderMessage(msg, save = false) {
 }
 
 // ================= Send Message =================
-chatForm.addEventListener("submit", e => {
-    e.preventDefault();
-    const text = chatInput.value.trim();
-    const fileInput = chatForm.querySelector("input[type='file']");
-    if (!text && (!fileInput || !fileInput.files.length)) return;
+if (chatForm) {
+    chatForm.addEventListener("submit", e => {
+        e.preventDefault();
+        const text = chatInput.value.trim();
+        const fileInput = chatForm.querySelector("input[type='file']");
+        if (!text && (!fileInput || !fileInput.files.length)) return;
 
-    const formData = new FormData();
-    formData.append("receiver_id", activeChatId);
-    formData.append("message", text);
-    if (fileInput && fileInput.files.length > 0) {
-        formData.append("media", fileInput.files[0]);
-    }
+        const formData = new FormData();
+        formData.append("receiver_id", activeChatId);
+        formData.append("message", text);
+        if (fileInput && fileInput.files.length > 0) {
+            formData.append("media", fileInput.files[0]);
+        }
 
-    fetch("send_message.php", { method: "POST", body: formData })
-        .then(res => res.json())
-        .then(resp => {
-            if (resp.success && resp.message) {
-                chatInput.value = "";
-                if (fileInput) fileInput.value = "";
-                socket.send(JSON.stringify({ type: "chat", ...resp.message }));
-            }
-        });
-});
+        fetch("send_message.php", { method: "POST", body: formData })
+            .then(res => res.json())
+            .then(resp => {
+                if (resp.success && resp.message) {
+                    chatInput.value = "";
+                    if (fileInput) fileInput.value = "";
+                    socket.send(JSON.stringify({ type: "chat", ...resp.message }));
+                }
+            });
+    });
+}
 
 // ================= Enter key shortcut =================
-chatInput.addEventListener("keydown", e => {
-    if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        chatForm.dispatchEvent(new Event("submit"));
-    }
-});
+if (chatInput) {
+    chatInput.addEventListener("keydown", e => {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            chatForm.dispatchEvent(new Event("submit"));
+        }
 
-// ================= Typing Indicator =================
-let typingUsers = {};   // Track currently typing users
-let typingTimers = {};  // Timer per user
-let typingTimeout;      // Local timeout for stop_typing
-
-// When YOU type in the chat input, send typing signal
-chatInput.addEventListener("input", () => {
-    if (!activeChatId) return;
-
-    socket.send(JSON.stringify({
-        type: "typing",
-        sender_id: currentUserId,
-        sender_name: myProfile.name,   // 👈 Make sure this = your real username (e.g., "Jose")
-        receiver_id: activeChatId
-    }));
-
-    // Stop typing after 2s of inactivity
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => {
+        // Send typing event while typing
         socket.send(JSON.stringify({
-            type: "stop_typing",
+            type: "typing",
             sender_id: currentUserId,
+            sender_name: currentUserName,
             receiver_id: activeChatId
         }));
-    }, 2000);
-});
 
-// Receive signals from WebSocket
-socket.addEventListener("message", event => {
-    const msg = JSON.parse(event.data);
-
-    // Show typing indicator for OTHER users
-    if (msg.type === "typing" && msg.sender_id !== currentUserId) {
-        typingUsers[msg.sender_id] = msg.sender_name || "Unknown";
-
-        typingUserName.innerText =
-            Object.values(typingUsers).join(", ") + " is typing...";
-        typingIndicator.style.display = "flex";
-
-        // Reset timer per user
-        clearTimeout(typingTimers[msg.sender_id]);
-        typingTimers[msg.sender_id] = setTimeout(() => {
-            delete typingUsers[msg.sender_id];
-
-            if (Object.keys(typingUsers).length === 0) {
-                typingIndicator.style.display = "none";
-            } else {
-                typingUserName.innerText =
-                    Object.values(typingUsers).join(", ") + " is typing...";
-            }
+        clearTimeout(window.typingTimeout);
+        window.typingTimeout = setTimeout(() => {
+            socket.send(JSON.stringify({
+                type: "stop_typing",
+                sender_id: currentUserId,
+                receiver_id: activeChatId
+            }));
         }, 2000);
-    }
-
-    // Handle stop_typing
-    if (msg.type === "stop_typing" && msg.sender_id !== currentUserId) {
-        delete typingUsers[msg.sender_id];
-        if (Object.keys(typingUsers).length === 0) {
-            typingIndicator.style.display = "none";
-        } else {
-            typingUserName.innerText =
-                Object.values(typingUsers).join(", ") + " is typing...";
-        }
-    }
-});
-
-
+    });
+}
 
 // ================= Friends List =================
 fetch("get_friends_chats.php")
@@ -782,6 +768,8 @@ function updateInboxBadge() {
         });
 }
 setInterval(updateInboxBadge, 5000);
+
+
 
 
 

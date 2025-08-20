@@ -1,83 +1,52 @@
+// server.js
 const WebSocket = require("ws");
-const net = require("net");
 
-// --- WebSocket server for browser clients ---
-const wss = new WebSocket.Server({ port: 3000 });
-let clients = {}; // user_id -> ws
+const wss = new WebSocket.Server({ port: 8080 });
+console.log("✅ WebSocket server running on ws://localhost:8080");
 
-wss.on("connection", ws => {
+let clients = {}; 
+// Structure: { userId: ws }
 
-    ws.on("message", raw => {
-        let msg;
-        try { msg = JSON.parse(raw); } catch { return; }
+wss.on("connection", (ws) => {
+    console.log("🔗 New client connected");
 
-        // --- Register user ---
-        if (msg.type === "init" && msg.user_id) {
-            clients[msg.user_id] = ws;
-            ws.user_id = msg.user_id;
-            console.log(`User joined: ${msg.user_id}`);
-        }
+    ws.on("message", (message) => {
+        try {
+            const data = JSON.parse(message);
 
-        // --- Typing indicator ---
-        if (msg.type === "typing" && msg.sender_id && msg.receiver_id) {
-            const receiver = clients[msg.receiver_id];
-            if (receiver?.readyState === WebSocket.OPEN && msg.sender_id !== msg.receiver_id) {
-                receiver.send(JSON.stringify({
-                    type: "typing",
-                    sender_id: msg.sender_id,
-                    sender_name: msg.sender_name
-                }));
+            // Register the user when they connect
+            if (data.type === "register") {
+                clients[data.user_id] = ws;
+                ws.user_id = data.user_id;
+                console.log(`✅ User ${data.user_id} registered`);
+                return;
             }
-        }
 
-        // --- Chat message ---
-        if (msg.type === "chat" && msg.sender_id && msg.receiver_id) {
-            [msg.sender_id, msg.receiver_id].forEach(id => {
-                const client = clients[id];
-                if (client?.readyState === WebSocket.OPEN) {
-                    client.send(JSON.stringify(msg));
+            // Forward typing or stop_typing to the correct receiver
+            if (data.type === "typing" || data.type === "stop_typing") {
+                const target = clients[data.receiver_id];
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify(data));
                 }
-            });
+            }
+
+            // Handle normal chat messages
+            if (data.type === "chat_message") {
+                const target = clients[data.receiver_id];
+                if (target && target.readyState === WebSocket.OPEN) {
+                    target.send(JSON.stringify(data));
+                }
+            }
+
+        } catch (err) {
+            console.error("❌ Error parsing message:", err);
         }
     });
 
     ws.on("close", () => {
-        if (ws.user_id && clients[ws.user_id] === ws) {
+        if (ws.user_id) {
             delete clients[ws.user_id];
-            console.log(`User disconnected: ${ws.user_id}`);
+            console.log(`❌ User ${ws.user_id} disconnected`);
         }
     });
-
-    ws.on("error", err => console.error("WebSocket error:", err.message));
 });
-
-// --- TCP Server for PHP push messages ---
-const tcpServer = net.createServer(socket => {
-    let buffer = "";
-
-    socket.on("data", chunk => {
-        buffer += chunk.toString();
-        const lines = buffer.split("\n");
-        buffer = lines.pop();
-
-        for (const line of lines) {
-            if (!line.trim()) continue;
-
-            let msg;
-            try { msg = JSON.parse(line); } catch { continue; }
-
-            if (msg.type === "chat" && msg.sender_id && msg.receiver_id) {
-                [msg.sender_id, msg.receiver_id].forEach(id => {
-                    const client = clients[id];
-                    if (client?.readyState === WebSocket.OPEN) {
-                        client.send(JSON.stringify(msg));
-                    }
-                });
-            }
-        }
-    });
-
-    socket.on("error", err => console.error("TCP socket error:", err.message));
-});
-
-tcpServer.listen(3001, "127.0.0.1", () => console.log("TCP push server running on port 3001"));

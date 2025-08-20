@@ -5,13 +5,12 @@ include("connect.php");
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     $action = $_POST['action'] ?? '';
 
-    // 🔐 SIGN UP
+    // 📝 SIGN UP
     if ($action === 'signup') {
-        $name = $_POST['name'] ?? '';
-        $email = $_POST['email'] ?? '';
+        $name     = trim($_POST['name'] ?? '');
+        $email    = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
-        $confirm = $_POST['confirm'] ?? '';
-        
+        $confirm  = $_POST['confirm'] ?? '';
 
         if (empty($name) || empty($email) || empty($password) || empty($confirm)) {
             header("Location: LeagueBook.php?error=empty");
@@ -23,6 +22,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             exit();
         }
 
+        // Check duplicate email
         $check = $conn->prepare("SELECT id FROM users WHERE email = ?");
         $check->bind_param("s", $email);
         $check->execute();
@@ -32,12 +32,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             exit();
         }
 
+        // Insert new user
         $hashedPassword = password_hash($password, PASSWORD_DEFAULT);
         $stmt = $conn->prepare("INSERT INTO users (name, email, password) VALUES (?, ?, ?)");
         $stmt->bind_param("sss", $name, $email, $hashedPassword);
 
         if ($stmt->execute()) {
-            header("Location: LeagueBook.php?success=signup");
+            $newUserId = $stmt->insert_id;
+
+            // ✅ Directly log in the new user
+            $_SESSION['user_id']   = $newUserId;
+            $_SESSION['email']     = $email;
+            $_SESSION['user_name'] = $name;
+            $_SESSION['is_admin']  = 0;
+
+            header("Location: LeagueBook_Page.php");
             exit();
         } else {
             header("Location: LeagueBook.php?error=sql");
@@ -47,22 +56,22 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     // 🔐 LOGIN
     if ($action === 'login') {
-        $email = $_POST['email'] ?? '';
+        $email    = trim($_POST['email'] ?? '');
         $password = $_POST['password'] ?? '';
 
-        $query = "SELECT * FROM users WHERE email = ?";
-        $stmt = $conn->prepare($query);
+        $stmt = $conn->prepare("SELECT * FROM users WHERE email = ?");
         $stmt->bind_param("s", $email);
         $stmt->execute();
         $result = $stmt->get_result();
 
         if ($user = $result->fetch_assoc()) {
             if (password_verify($password, $user['password'])) {
-               $_SESSION['user_id'] = $user['id'];
-               $_SESSION['email'] = $user['email'];
-               $_SESSION['user_name'] = $user['name'];
-               $_SESSION['is_admin'] = $user['is_admin']; // ✅ Must be set here
-               
+                // ✅ Store everything in session
+                $_SESSION['user_id']   = $user['id'];
+                $_SESSION['email']     = $user['email'];
+                $_SESSION['user_name'] = $user['name'];
+                $_SESSION['is_admin']  = $user['is_admin'] ?? 0;
+
                 header("Location: LeagueBook_Page.php");
                 exit();
             }
@@ -73,6 +82,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
