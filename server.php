@@ -47,12 +47,32 @@ class ChatServer implements MessageComponentInterface {
         }
 
         // --- Typing indicator ---
-        if ($data['type'] === 'typing') {
+        if ($data['type'] === 'typing' || $data['type'] === 'stop_typing') {
             $receiverId = $data['receiver_id'];
             if (isset($this->userMap[$receiverId])) {
                 $this->userMap[$receiverId]->send(json_encode($data));
             }
-            // No echo back to sender
+        }
+
+        // --- Real-time deletion ---
+        if ($data['type'] === 'delete_message') {
+            $senderId   = $data['sender_id'];
+            $receiverId = $data['receiver_id'];
+            $messageId  = $data['message_id'];
+
+            // Notify both sender and receiver if online
+            foreach ([$senderId, $receiverId] as $uid) {
+                if (isset($this->userMap[$uid])) {
+                    $this->userMap[$uid]->send(json_encode([
+                        'type' => 'delete_message',
+                        'message_id' => $messageId,
+                        'sender_id' => $senderId,
+                        'receiver_id' => $receiverId
+                    ]));
+                }
+            }
+
+            echo "🗑 Message {$messageId} deleted by {$senderId}\n";
         }
     }
 

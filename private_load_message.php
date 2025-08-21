@@ -33,7 +33,6 @@ $limit  = isset($_GET['limit']) ? max(1, min(100, (int) $_GET['limit'])) : 50;
 $offset = isset($_GET['offset']) ? max(0, (int) $_GET['offset']) : 0;
 
 // --- Fetch messages (newest first, then reversed for display) ---
-// --- Fetch messages (newest first, then reversed for display) ---
 $query = "
     SELECT pm.*, u.name AS sender_name, u.avatar AS sender_avatar
     FROM private_messages pm
@@ -61,12 +60,14 @@ while ($row = $result->fetch_assoc()) {
         "sender_id"     => (int) $row['sender_id'],
         "receiver_id"   => (int) $row['receiver_id'],
         "sender_name"   => $row['sender_name'],
-        "sender_avatar" => $row['sender_avatar'] ?: 'default-avatar.png', // Add avatar
+        "sender_avatar" => $row['sender_avatar'] ?: 'default-avatar.png',
         "message"       => $row['message'],
         "created_at"    => $row['created_at'],
         "media_path"    => $row['media_path'] ?: null,
         "media_type"    => $row['media_type'] ?: null,
-        "is_read"       => (int) $row['is_read']
+        "is_read"       => (int) $row['is_read'],
+        // NEW: can_delete flag for frontend
+        "can_delete"    => ((int)$row['sender_id'] === $currentUserId)
     ];
 }
 
@@ -78,4 +79,3 @@ echo json_encode([
     'messages' => $messages,
     'count'    => count($messages)
 ]);
-

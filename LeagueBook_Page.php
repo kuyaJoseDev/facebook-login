@@ -173,7 +173,6 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 <!-- Chat Templates: Mini Windows will be generated dynamically -->
 
 
-<!-- Chat Widget -->
 <div id="chatWidget" class="chat-widget">
   <!-- Chat Header -->
   <div class="chat-header">
@@ -199,7 +198,19 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
     <textarea id="chatInput" rows="2" placeholder="Type a message..." autocomplete="off"></textarea>
     <button type="submit" class="chat-send-btn">Send</button>
   </form>
+</div> <!-- end chatWidget -->
+
+<!-- 🔽 Place modal right here -->
+<div id="deleteModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <p>Are you sure you want to delete this message?</p>
+    <div class="modal-buttons">
+      <button id="confirmDelete" class="btn-yes">Yes</button>
+      <button id="cancelDelete" class="btn-no">No</button>
+    </div>
+  </div>
 </div>
+
 
 
 
@@ -478,6 +489,49 @@ $unreadCount = $unreadCount ?? 0; // fallback if not set
 .message-container a img.avatar {
     cursor: pointer;
 }
+.modal {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-content {
+  background: #000000ff;
+  padding: 20px;
+  border-radius: 12px;
+  text-align: center;
+  width: 280px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+
+.modal-buttons {
+  margin-top: 15px;
+  display: flex;
+  justify-content: space-around;
+}
+
+.btn-yes {
+  background: #e74c3c;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-no {
+  background: #bdc3c7;
+  color: #333;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+}
 
 </style>
 
@@ -538,10 +592,16 @@ socket.addEventListener("message", event => {
     if (!msg.type) return;
 
     switch(msg.type) {
+
+        // --- Chat message ---
         case "chat":
             const otherUser = msg.sender_id === currentUserId ? msg.receiver_id : msg.sender_id;
             if (!openChats[otherUser]) {
-                openChats[otherUser] = { messages: [], name: msg.sender_name || "User", avatar: msg.sender_avatar || 'uploads/default-avatar.png' };
+                openChats[otherUser] = { 
+                    messages: [], 
+                    name: msg.sender_name || "User", 
+                    avatar: msg.sender_avatar || 'uploads/default-avatar.png' 
+                };
             }
             openChats[otherUser].messages.push(msg);
 
@@ -554,12 +614,15 @@ socket.addEventListener("message", event => {
             }
             break;
 
+        // --- Typing indicators ---
         case "typing":
             if (activeChatId === msg.sender_id) {
                 typingIndicator.style.display = "block";
                 typingIndicator.innerText = `${msg.sender_name} is typing...`;
                 clearTimeout(window.typingTimeout);
-                window.typingTimeout = setTimeout(() => typingIndicator.style.display = "none", 2000);
+                window.typingTimeout = setTimeout(() => {
+                    typingIndicator.style.display = "none";
+                }, 2000);
             }
             break;
 
@@ -568,12 +631,24 @@ socket.addEventListener("message", event => {
                 typingIndicator.style.display = "none";
             }
             break;
+
+        // --- Real-time deletion ---
+    case "delete_message":
+    const div = document.querySelector(`#msg-${msg.message_id}`);
+    if (div) div.remove();
+
+    if (activeChatId && openChats[activeChatId]) {
+        openChats[activeChatId].messages = openChats[activeChatId].messages.filter(
+            m => m.message_id !== msg.message_id   // ✅ consistent
+        );
+    }
+    break;
+
+
+        // --- Add other cases below if needed ---
     }
 });
 
-// ================= Chat Widget Toggle =================
-if (openChatBtn) openChatBtn.addEventListener("click", () => chatWidget.style.display = "flex");
-if (closeChatBtn) closeChatBtn.addEventListener("click", () => chatWidget.style.display = "none");
 
 // ================= Open Chat =================
 function openChatWithUser(userId, userName, userAvatar = 'uploads/default-avatar.png') {
@@ -624,6 +699,7 @@ function renderMessage(msg, save = false) {
     if (!msg) return;
 
     const div = document.createElement("div");
+    div.id = `msg-${msg.message_id}`; // ✅ use message_id consistently
     div.className = "message " + (msg.sender_id === currentUserId ? "my-message" : "their-message");
 
     const avatarSrc = msg.sender_avatar || (msg.sender_id === currentUserId ? myProfile.avatar : 'uploads/default-avatar.png');
@@ -633,13 +709,29 @@ function renderMessage(msg, save = false) {
             ${msg.sender_id !== currentUserId 
                 ? `<img class="avatar" src="${avatarSrc}" alt="avatar" onclick="window.location.href='view_profile.php?id=${msg.sender_id}'">` 
                 : ""}
-            <div class="bubble">
-                ${msg.sender_id !== currentUserId ? `<strong>${msg.sender_name}</strong><br>` : ""}
-                ${msg.message.replace(/\n/g, "<br>")}
-                ${msg.media_path && msg.media_type === "image" ? `<br><img src="${msg.media_path}" style="max-width:100%;">` : ""}
-                ${msg.media_path && msg.media_type === "video" ? `<br><video controls style="max-width:100%;"><source src="${msg.media_path}" type="video/mp4"></video>` : ""}
-                <br><small>${msg.created_at}</small>
-            </div>
+
+     <div class="bubble">
+    ${msg.sender_id !== currentUserId ? `<strong>${msg.sender_name}</strong><br>` : ""}
+    <div class="msg-text">${msg.message.replace(/\n/g, "<br>")}</div>
+    ${msg.media_path && msg.media_type === "image" ? `<br><img src="${msg.media_path}" style="max-width:100%;">` : ""}
+    ${msg.media_path && msg.media_type === "video" ? `<br><video controls style="max-width:100%;"><source src="${msg.media_path}" type="video/mp4"></video>` : ""}
+    <br><small>${msg.created_at}</small>
+
+    <div class="msg-actions">
+        <!-- ✅ Reply button here -->
+        <button class="btn-reply" 
+            data-msgid="${msg.id}" 
+            data-sender="${msg.sender_name || ''}" 
+            data-text="${msg.message || ''}">↩ Reply</button>
+
+        <!-- ✅ Only show delete button if it’s my message -->
+        ${msg.sender_id === currentUserId 
+            ? `<button class="btn-delete" data-msgid="${msg.id}">🗑 Delete</button>` 
+            : ""}
+    </div>
+</div>
+
+
             ${msg.sender_id === currentUserId 
                 ? `<img class="avatar" src="${avatarSrc}" alt="avatar" onclick="window.location.href='view_profile.php?id=${msg.sender_id}'">` 
                 : ""}
@@ -649,8 +741,79 @@ function renderMessage(msg, save = false) {
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
 
-    if (save && activeChatId) openChats[activeChatId].messages.push(msg);
+    if (save && activeChatId) {
+        openChats[activeChatId].messages.push(msg);
+    }
+
+    // --- Reply ---
+    const replyBtn = div.querySelector(".btn-reply");
+    if (replyBtn) {
+        replyBtn.addEventListener("click", () => {
+            chatInput.value = `@${replyBtn.dataset.sender}: ${replyBtn.dataset.text}\n` + chatInput.value;
+            chatInput.focus();
+        });
+    }
+
+    // --- Delete with modal & real-time ---
+    const deleteBtn = div.querySelector(".btn-delete");
+    if (deleteBtn) {
+        deleteBtn.addEventListener("click", () => {
+            const modal = document.getElementById("deleteModal");
+            const confirmBtn = document.getElementById("confirmDelete");
+            const cancelBtn = document.getElementById("cancelDelete");
+
+            modal.style.display = "flex";
+
+            confirmBtn.onclick = null;
+            cancelBtn.onclick = null;
+
+            confirmBtn.onclick = () => {
+                // 1️⃣ Notify WebSocket
+                if (socket && socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify({
+                        type: "delete_message",
+                        message_id: deleteBtn.dataset.msgid,   // ✅ consistent
+                        sender_id: currentUserId,
+                        receiver_id: activeChatId
+                    }));
+                }
+
+                // 2️⃣ Delete from DB
+                fetch("delete_message.php", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message_id: deleteBtn.dataset.msgid })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        div.remove();
+                        if (activeChatId && openChats[activeChatId]) {
+                            openChats[activeChatId].messages = openChats[activeChatId].messages.filter(
+                                m => m.message_id != deleteBtn.dataset.msgid   // ✅ fixed
+                            );
+                        }
+                    } else {
+                        console.error("Delete failed:", data);
+                        alert(data.message || "Failed to delete message");
+                    }
+                })
+                .catch(err => {
+                    console.error("Error deleting:", err);
+                    alert("Server error while deleting message");
+                })
+                .finally(() => {
+                    modal.style.display = "none";
+                });
+            };
+
+            cancelBtn.onclick = () => {
+                modal.style.display = "none";
+            };
+        });
+    }
 }
+
 
 // ================= Send Message =================
 if (chatForm) {
